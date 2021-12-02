@@ -1,0 +1,104 @@
+open BeyondBasis.Pervasive
+
+val getopt = Getopt.new ()
+val parsed_commandline = Std.Result.get_ok_unsafe (Getopt.parse (getopt,
+                                                                 Std.CommandLine.arguments ()))
+val file_path = Std.Option.get_unsafe (
+      Std.List.nth (Getopt.ParseResult.free_values parsed_commandline, 0)
+    )
+
+val () = print ("opening " ^ file_path ^ "\n")
+val file = (Std.Filesystem.File.open_path (
+               file_path,
+               (Std.Filesystem.OpenOptions.new ())
+                 |> (Std.Filesystem.OpenOptions.read true)
+           ))
+             |> Std.Result.get_ok_unsafe
+
+
+val file_contents = (Std.Filesystem.File.read_to_end_to_string file)
+                      |> Std.Result.get_ok_unsafe
+val lines = Std.String.split (file_contents, #"\n")
+val () = print (Std.String.concat [
+                   "Got ",
+                   (Std.Int.to_string o Std.List.length) lines,
+                   " lines\n"
+               ])
+
+datatype command = Forward of int
+                 | Up of int
+                 | Down of int
+
+val commands = Std.Vector.from_list (
+      Std.List.fold_right (
+        lines,
+        [],
+        fn (line, parsed) =>
+           let
+             fun parse_int i =
+                 (Std.Option.get_unsafe o Std.Result.get_ok_unsafe o Std.Int.from_string) i
+
+             fun parse (command_str, arg_str) =
+                 let
+                   val arg = parse_int arg_str
+                 in
+                   case command_str of
+                     | "forward" => Forward arg
+                     | "up" => Up arg
+                     | "down" => Down arg
+                     | _ => raise Fail ("Could not parse command \"" ^ command_str ^ "\"")
+                   end
+                 end
+           in
+             case Std.String.split (line, #" ") of
+               | [command_str, arg_str] => (parse (command_str, arg_str)) :: parsed
+               | _ => parsed
+             end
+           end
+      )
+    )
+val () = print (Std.String.concat [
+                   "Parsed ",
+                   (Std.Int.to_string o Std.Vector.length) commands,
+                   " commands\n"
+               ])
+
+val (horiz_pos, depth) = Std.Vector.fold_left (
+      commands,
+      (0, 0),
+      fn (command, (horiz_pos, depth)) =>
+         case command of
+           | Forward i => (horiz_pos + i, depth)
+           | Up i => (horiz_pos, depth - i)
+           | Down i => (horiz_pos, depth + i)
+         end
+    )
+val () = print (Std.String.concat [
+                   "part 1: (horiz pos: ",
+                   Std.Int.to_string horiz_pos,
+                   ", depth: ",
+                   Std.Int.to_string depth,
+                   ", product: ",
+                   Std.Int.to_string (horiz_pos * depth),
+                   ")\n"
+               ])
+
+val (horiz_pos, depth, _) = Std.Vector.fold_left (
+      commands,
+      (0, 0, 0),
+      fn (command, (horiz_pos, depth, aim)) =>
+         case command of
+           | Forward i => (horiz_pos + i, depth + (aim * i), aim)
+           | Up i => (horiz_pos, depth, aim - i)
+           | Down i => (horiz_pos, depth, aim + i)
+         end
+    )
+val () = print (Std.String.concat [
+                   "part 2: (horiz pos: ",
+                   Std.Int.to_string horiz_pos,
+                   ", depth: ",
+                   Std.Int.to_string depth,
+                   ", product: ",
+                   Std.Int.to_string (horiz_pos * depth),
+                   ")\n"
+               ])
