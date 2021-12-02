@@ -1,1 +1,3 @@
-# Project description
+# Advent of Code 2021.
+
+Attempting to do the problems in my Standard ML derivative called Imli.
