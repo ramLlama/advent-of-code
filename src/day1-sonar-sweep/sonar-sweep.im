@@ -1,0 +1,91 @@
+open BeyondBasis.Pervasive
+
+val getopt = Getopt.new ()
+val parsed_commandline = Std.Result.get_ok_unsafe (Getopt.parse (getopt,
+                                                                 Std.CommandLine.arguments ()))
+val file_path = Std.Option.get_unsafe (
+      Std.List.nth (Getopt.ParseResult.free_values parsed_commandline, 0)
+    )
+
+val () = print ("opening " ^ file_path ^ "\n")
+val file = (Std.Filesystem.File.open_path (
+               file_path,
+               (Std.Filesystem.OpenOptions.new ())
+                 |> (Std.Filesystem.OpenOptions.read true)
+           ))
+             |> Std.Result.get_ok_unsafe
+
+
+val file_contents = (Std.Filesystem.File.read_to_end_to_string file)
+                      |> Std.Result.get_ok_unsafe
+val lines = Std.String.split (file_contents, #"\n")
+val () = print (Std.String.concat [
+                   "Got ",
+                   (Std.Int.to_string o Std.List.length) lines,
+                   " lines\n"
+               ])
+
+val numbers = Std.Vector.from_list (
+      Std.List.fold_right (
+        lines,
+        [],
+        fn (line, parsed) =>
+           case (Std.Result.get_ok_unsafe o Std.Int.from_string) line of
+             | Some i => i :: parsed
+             | None => parsed
+           end
+      )
+    )
+val () = print (Std.String.concat [
+                   "Parsed ",
+                   (Std.Int.to_string o Std.Vector.length) numbers,
+                   " numbers\n"
+               ])
+
+val (num_increases, _) = Std.Vector.fold_left (
+      numbers,
+      (0, None),
+      fn (next_num, (num_incr, prev_num)) =>
+         case prev_num of
+           | None => (num_incr, Some next_num)
+           | Some i => if next_num > i
+                       then (num_incr + 1, Some next_num)
+                       else (num_incr, Some next_num)
+         end
+    )
+val () = print (Std.String.concat [
+                   "Num single increases: ",
+                   Std.Int.to_string num_increases,
+                   "\n"
+               ])
+
+val (window_num_increases, _) = Std.Vector.fold_index_left (
+      numbers,
+      (0, None),
+      fn (_, idx, (num_incr, prev_window)) =>
+         let
+           val this_window =
+               if (idx + 2) < (Std.Vector.length numbers)
+               then // I have a window so sum it
+                 Some (Std.Vector.sub_unsafe (numbers, idx)
+                       + Std.Vector.sub_unsafe (numbers, idx + 1)
+                       + Std.Vector.sub_unsafe (numbers, idx + 2))
+               else None
+         in
+           case (prev_window, this_window) of
+             | (None, _) => (num_incr, this_window)
+             | (Some prev_sum, None) =>
+                 // no more windows, so close it out
+                 (num_incr, None)
+             | (Some prev_sum, Some this_sum) =>
+                 if this_sum > prev_sum
+                 then (num_incr + 1, this_window)
+                 else (num_incr, this_window)
+           end
+         end
+    )
+val () = print (Std.String.concat [
+                   "Num window increases: ",
+                   Std.Int.to_string window_num_increases,
+                   "\n"
+               ])
