@@ -11,7 +11,7 @@ val () = print ("opening " ^ file_path ^ "\n")
 val file = (Std.Filesystem.File.open_path (
                file_path,
                (Std.Filesystem.OpenOptions.new ())
-                 |> (Std.Filesystem.OpenOptions.read true)
+                 <\ Std.Filesystem.OpenOptions.read \> true
            ))
              |> Std.Result.get_ok_unsafe
 
@@ -30,9 +30,9 @@ val numbers = Std.Vector.from_list (
         lines,
         [],
         fn (line, parsed) =>
-           case (Std.Result.get_ok_unsafe o Std.Int.from_string) line of
-             | Some i => i :: parsed
-             | None => parsed
+           case Std.Int.from_string line of
+             | Ok i => i :: parsed
+             | Error _ => parsed
            end
       )
     )

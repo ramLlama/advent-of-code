@@ -10,8 +10,8 @@ val file_path = Std.Option.get_unsafe (
 val () = print ("opening " ^ file_path ^ "\n")
 val file = (Std.Filesystem.File.open_path (
                file_path,
-               (Std.Filesystem.OpenOptions.new ())
-                 |> (Std.Filesystem.OpenOptions.read true)
+               Std.Filesystem.OpenOptions.new ()
+               <\ Std.Filesystem.OpenOptions.read \> true
            ))
              |> Std.Result.get_ok_unsafe
 
@@ -36,7 +36,8 @@ val commands = Std.Vector.from_list (
         fn (line, parsed) =>
            let
              fun parse_int i =
-                 (Std.Option.get_unsafe o Std.Result.get_ok_unsafe o Std.Int.from_string) i
+                 (print (i ^ "\n");
+                 (Std.Result.get_ok_unsafe o Std.Int.from_string) i)
 
              fun parse (command_str, arg_str) =
                  let
