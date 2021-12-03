@@ -1,0 +1,6 @@
+local
+   $(BEYOND_BASIS)
+   $(GETOPT)
+in
+   day3.im
+end

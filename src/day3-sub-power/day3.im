@@ -1,0 +1,182 @@
+open BeyondBasis.Pervasive
+
+val getopt = Getopt.new ()
+val parsed_commandline = Std.Result.get_ok_unsafe (Getopt.parse (getopt,
+                                                                 Std.CommandLine.arguments ()))
+val file_path = Std.Option.get_unsafe (
+      Std.List.nth (Getopt.ParseResult.free_values parsed_commandline, 0)
+    )
+val bits_per_word = (Std.List.nth (Getopt.ParseResult.free_values parsed_commandline, 1))
+                      |> Std.Option.get_unsafe
+                      |> Std.Int.from_string
+                      |> Std.Result.get_ok_unsafe
+
+val () = print ("opening " ^ file_path ^ "\n")
+val file = (Std.Filesystem.File.open_path (
+               file_path,
+               Std.Filesystem.OpenOptions.new ()
+               <\ Std.Filesystem.OpenOptions.read \> true
+           ))
+             |> Std.Result.get_ok_unsafe
+
+
+val file_contents = (Std.Filesystem.File.read_to_end_to_string file)
+                      |> Std.Result.get_ok_unsafe
+val lines = Std.String.split (file_contents, #"\n")
+val () = print (Std.String.concat [
+                   "Got ",
+                   (Std.Int.to_string o Std.List.length) lines,
+                   " lines\n"
+               ])
+
+val words = Std.Vector.from_list (
+      Std.List.fold_right (
+        lines,
+        [],
+        fn (line, result) =>
+           case Std.Word.from_string_radix (line, 2) of
+             | Ok w => w :: result
+             | Error _ => result
+           end
+      )
+    )
+val () = print (Std.String.concat [
+                   "Parsed ",
+                   (Std.Int.to_string o Std.Vector.length) words,
+                   " words\n"
+               ])
+
+val num_set_bits = Std.Array.new (bits_per_word, 0)
+val num_bits_threshold = Std.Vector.length words div 2
+
+fun update_set_bits_for_word w =
+    Std.Array.mutate_index (
+      num_set_bits,
+      fn (num, i) =>
+         if (0w1
+             <\ Std.Word.<< \> (Std.Word.cast_from_int i)
+             <\ Std.Word.andb \> w)
+            > 0w0
+         then num + 1
+         else num
+    )
+
+val _ = Std.Vector.app (
+      words,
+      update_set_bits_for_word
+    )
+
+val _ = Std.Array.app_index (
+      num_set_bits,
+      fn (num, i) =>
+         print (Std.String.concat [
+                   "bit ",
+                   Std.Int.to_string i,
+                   ": ",
+                   Std.Int.to_string num,
+                   "\n"
+               ])
+    )
+
+val gamma = Std.Array.fold_right (
+      num_set_bits,
+      0w0,
+      fn (num, result) =>
+         let
+           val result = result <\ Std.Word.<< \> 0w1
+         in
+           if num > num_bits_threshold
+           then result + 0w1
+           else result
+         end
+    )
+val epsilon = gamma
+              <\ Std.Word.xorb \>
+               ((0w1 <\ Std.Word.<< \> (Std.Word.cast_from_int bits_per_word)) - 0w1)
+val () = print (Std.String.concat [
+                   "part 1: (gamma: ",
+                   Std.Word.to_string gamma,
+                   "/",
+                   (Std.Result.get_ok_unsafe o Std.Word.to_string_radix)
+                     (gamma, 2, {plus_sign = false, prefix = Some "0wb"}),
+                   "), epsilon: ",
+                   Std.Word.to_string epsilon,
+                   "/",
+                   (Std.Result.get_ok_unsafe o Std.Word.to_string_radix)
+                     (epsilon, 2, {plus_sign = false, prefix = Some "0wb"}),
+                   ", product: ",
+                   Std.Word.to_string (gamma * epsilon),
+                   ")\n"
+               ])
+
+fun filter most_common =
+    let
+      fun loop (i, input) =
+          let
+            val num_set_at_i = Std.Vector.fold_left (
+                  input,
+                  0,
+                  fn (w, num) =>
+                     if (0w1
+                         <\ Std.Word.<< \> (Std.Word.cast_from_int i)
+                         <\ Std.Word.andb \> w)
+                        > 0w0
+                     then num + 1
+                     else num
+                )
+
+            val mask = 0w1 <\ Std.Word.<< \> (Std.Word.cast_from_int i)
+            val desired_bit = if (num_set_at_i * 2) >= Std.Vector.length input
+                              then if most_common
+                                   then 0w1
+                                   else 0w0
+                              else if most_common
+                              then 0w0
+                              else 0w1
+            val desired_value = desired_bit <\ Std.Word.<< \> (Std.Word.cast_from_int i)
+
+            val filtered_input = Std.Vector.filter (
+                  input,
+                  fn v =>
+                     (v <\ Std.Word.andb \> mask) = desired_value
+                )
+            val _ = print (Std.String.concat [
+                              "bit ",
+                              Std.Int.to_string i,
+                              ": Found ",
+                              Std.Int.to_string num_set_at_i,
+                              "/",
+                              (Std.Int.to_string o Std.Vector.length) input,
+                              " bits set. Filtering for ",
+                              if most_common then "most common" else "least common",
+                              " from ",
+                              (Std.Int.to_string o Std.Vector.length) input,
+                              " -> ",
+                              (Std.Int.to_string o Std.Vector.length) filtered_input,
+                              "\n"
+                          ])
+          in
+            if Std.Vector.length filtered_input = 1
+            then Std.Vector.sub_unsafe (filtered_input, 0)
+            else loop (i - 1, filtered_input)
+          end
+    in
+      loop (bits_per_word - 1, words)
+    end
+
+val (oxygen, co2) = (filter true, filter false)
+val () = print (Std.String.concat [
+                   "part 2: (oxygen: ",
+                   Std.Word.to_string oxygen,
+                   "/",
+                   (Std.Result.get_ok_unsafe o Std.Word.to_string_radix)
+                     (oxygen, 2, {plus_sign = false, prefix = Some "0wb"}),
+                   "), co2: ",
+                   Std.Word.to_string co2,
+                   "/",
+                   (Std.Result.get_ok_unsafe o Std.Word.to_string_radix)
+                     (co2, 2, {plus_sign = false, prefix = Some "0wb"}),
+                   ", product: ",
+                   Std.Word.to_string (oxygen * co2),
+                   ")\n"
+               ])
