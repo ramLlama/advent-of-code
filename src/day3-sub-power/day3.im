@@ -1,15 +1,15 @@
 open BeyondBasis.Pervasive
 
 val getopt = Getopt.new ()
-val parsed_commandline = Std.Result.get_ok_unsafe (Getopt.parse (getopt,
+val parsed_commandline = Std.Result.Unsafe.get_ok (Getopt.parse (getopt,
                                                                  Std.CommandLine.arguments ()))
-val file_path = Std.Option.get_unsafe (
+val file_path = Std.Option.Unsafe.get (
       Std.List.nth (Getopt.ParseResult.free_values parsed_commandline, 0)
     )
 val bits_per_word = (Std.List.nth (Getopt.ParseResult.free_values parsed_commandline, 1))
-                      |> Std.Option.get_unsafe
+                      |> Std.Option.Unsafe.get
                       |> Std.Int.from_string
-                      |> Std.Result.get_ok_unsafe
+                      |> Std.Result.Unsafe.get_ok
 
 val () = print ("opening " ^ file_path ^ "\n")
 val file = (Std.Filesystem.File.open_path (
@@ -17,11 +17,11 @@ val file = (Std.Filesystem.File.open_path (
                Std.Filesystem.OpenOptions.new ()
                <\ Std.Filesystem.OpenOptions.read \> true
            ))
-             |> Std.Result.get_ok_unsafe
+             |> Std.Result.Unsafe.get_ok
 
 
 val file_contents = (Std.Filesystem.File.read_to_end_to_string file)
-                      |> Std.Result.get_ok_unsafe
+                      |> Std.Result.Unsafe.get_ok
 val lines = Std.String.split (file_contents, #"\n")
 val () = print (Std.String.concat [
                    "Got ",
@@ -97,12 +97,12 @@ val () = print (Std.String.concat [
                    "part 1: (gamma: ",
                    Std.Word.to_string gamma,
                    "/",
-                   (Std.Result.get_ok_unsafe o Std.Word.to_string_radix)
+                   (Std.Result.Unsafe.get_ok o Std.Word.to_string_radix)
                      (gamma, 2, {plus_sign = false, prefix = Some "0wb"}),
                    "), epsilon: ",
                    Std.Word.to_string epsilon,
                    "/",
-                   (Std.Result.get_ok_unsafe o Std.Word.to_string_radix)
+                   (Std.Result.Unsafe.get_ok o Std.Word.to_string_radix)
                      (epsilon, 2, {plus_sign = false, prefix = Some "0wb"}),
                    ", product: ",
                    Std.Word.to_string (gamma * epsilon),
@@ -169,12 +169,12 @@ val () = print (Std.String.concat [
                    "part 2: (oxygen: ",
                    Std.Word.to_string oxygen,
                    "/",
-                   (Std.Result.get_ok_unsafe o Std.Word.to_string_radix)
+                   (Std.Result.Unsafe.get_ok o Std.Word.to_string_radix)
                      (oxygen, 2, {plus_sign = false, prefix = Some "0wb"}),
                    "), co2: ",
                    Std.Word.to_string co2,
                    "/",
-                   (Std.Result.get_ok_unsafe o Std.Word.to_string_radix)
+                   (Std.Result.Unsafe.get_ok o Std.Word.to_string_radix)
                      (co2, 2, {plus_sign = false, prefix = Some "0wb"}),
                    ", product: ",
                    Std.Word.to_string (oxygen * co2),

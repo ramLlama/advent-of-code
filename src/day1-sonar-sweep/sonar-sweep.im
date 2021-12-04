@@ -1,9 +1,9 @@
 open BeyondBasis.Pervasive
 
 val getopt = Getopt.new ()
-val parsed_commandline = Std.Result.get_ok_unsafe (Getopt.parse (getopt,
+val parsed_commandline = Std.Result.Unsafe.get_ok(Getopt.parse (getopt,
                                                                  Std.CommandLine.arguments ()))
-val file_path = Std.Option.get_unsafe (
+val file_path = Std.Option.Unsafe.get (
       Std.List.nth (Getopt.ParseResult.free_values parsed_commandline, 0)
     )
 
@@ -13,11 +13,11 @@ val file = (Std.Filesystem.File.open_path (
                (Std.Filesystem.OpenOptions.new ())
                  <\ Std.Filesystem.OpenOptions.read \> true
            ))
-             |> Std.Result.get_ok_unsafe
+             |> Std.Result.Unsafe.get_ok
 
 
 val file_contents = (Std.Filesystem.File.read_to_end_to_string file)
-                      |> Std.Result.get_ok_unsafe
+                      |> Std.Result.Unsafe.get_ok
 val lines = Std.String.split (file_contents, #"\n")
 val () = print (Std.String.concat [
                    "Got ",
