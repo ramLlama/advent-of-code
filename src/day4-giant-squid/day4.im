@@ -1,0 +1,128 @@
+open BeyondBasis.Pervasive
+
+structure BingoMap = Citroen.Imperative.HashMap.Make (type key = int
+                                                      val hash = Std.Utilities.hash
+                                                      val equals = op=)
+
+type board_state = {
+  marked_in_row: int Std.Array.t,
+  marked_in_column: int Std.Array.t,
+  unmarked_sum: int ref,
+  number_map: (int * int) BingoMap.t,
+  still_playing: bool ref
+}
+
+fun new_board board_size =
+    {marked_in_row = Std.Array.new (board_size, 0),
+     marked_in_column = Std.Array.new (board_size, 0),
+     unmarked_sum = ref 0,
+     number_map = BingoMap.new (),
+     still_playing = ref true}
+
+
+val lines = (Std.Vector.sub (Util.get_args 1, 0)) |> Std.Option.Unsafe.get |> Util.file_to_lines
+val () = print (Std.String.concat [
+                   "Got ",
+                   (Std.Int.to_string o Std.Vector.length) lines,
+                   " lines\n"
+               ])
+
+val call_numbers = (Std.Vector.Unsafe.sub (lines, 0))
+                   <\ Std.String.split \> #","
+                   <\ Std.List.map \> (Std.Result.Unsafe.get_ok o Std.Int.from_string)
+
+val _ = println (Std.String.concat [
+                    "Call numbers are ",
+                    Std.String.concat_with (
+                      Std.List.map (call_numbers, Std.Int.to_string),
+                      ", "
+                    )
+                ])
+
+val board_size = 5
+val (boards, _) = Std.Vector.fold_index_left (
+      lines,
+      ([], 0),
+      fn (line, i, (boards, row)) =>
+         if i = 0
+         then (boards, row) // first line is call numbers
+         else if line = ""
+         then // this is a separator, add a new board and reset.
+           ((new_board board_size) :: boards, 0)
+         else // this line belongs to the current board
+           let
+             val {unmarked_sum, number_map, ...} = Std.List.head boards |> Std.Option.Unsafe.get
+             val numbers = line
+                           <\ Std.String.split \> #" "
+                           <\ Std.List.filter \> (fn s => s <> "")
+                           <\ Std.List.map \> (
+                             fn v =>
+                                Std.Result.project_map (
+                                    Std.Int.from_string v,
+                                    fn i => i,
+                                    fn e => raise Fail (Std.Int.FromStringError.to_string e)
+                                  )
+                           )
+           in
+             Std.List.app_index (
+               numbers,
+               fn (v, col) =>
+                  (unmarked_sum := !unmarked_sum + v;
+                   if BingoMap.add (number_map, v, (row, col))
+                   then ()
+                   else raise Fail "duplicate bingo number found")
+             );
+             (boards, row + 1)
+           end
+    )
+val boards = Std.List.reverse boards // I appended boards, so need to reverse.
+val _ = println ("Parsed " ^ ((Std.Int.to_string o Std.List.length) boards) ^ " boards")
+
+val (first_winning_score, last_winning_score) = Std.List.fold_left (
+      call_numbers,
+      (0, 0),
+      fn (num, (first_winning_score, last_winning_score)) =>
+         (
+           println ("Calling number " ^ Std.Int.to_string num);
+           Std.List.fold_index_left (
+             boards,
+             (first_winning_score, last_winning_score),
+             fn ({marked_in_row,  marked_in_column, unmarked_sum, number_map, still_playing},
+                 board_index,
+                 (first_winning_score, last_winning_score)) =>
+                if !still_playing
+                then
+                  case BingoMap.get (number_map, num) of
+                    | Some (_, (row, col)) =>
+                        let
+                          val new_marked_in_row =
+                              Std.Array.Unsafe.sub (marked_in_row, row) + 1
+                          val new_marked_in_col =
+                              Std.Array.Unsafe.sub (marked_in_column, col) + 1
+                          val new_unmarked_sum = !unmarked_sum - num
+                        in
+                          Std.Array.Unsafe.set (marked_in_row, row, new_marked_in_row);
+                          Std.Array.Unsafe.set (marked_in_column, col, new_marked_in_col);
+                          unmarked_sum := new_unmarked_sum;
+                          if new_marked_in_row = board_size
+                             orelse new_marked_in_col = board_size
+                          then // winner, winner, chicken dinner!
+                            (
+                              println ("Board " ^ Std.Int.to_string board_index ^ " won");
+                              still_playing := false;
+                              if first_winning_score = 0
+                              then // this is the first winner
+                                (new_unmarked_sum * num, last_winning_score)
+                              else // this is the latest winner
+                                (first_winning_score, new_unmarked_sum * num)
+                            )
+                          else (first_winning_score, last_winning_score)
+                        end
+                    | None => (first_winning_score, last_winning_score)
+                  end
+                else (first_winning_score, last_winning_score)
+           )
+         )
+    )
+val _ = println ("First Winning score is " ^ Std.Int.to_string first_winning_score)
+val _ = println ("Last Winning score is " ^ Std.Int.to_string last_winning_score)
