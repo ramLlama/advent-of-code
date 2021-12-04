@@ -157,7 +157,7 @@ fun filter most_common =
                           ])
           in
             if Std.Vector.length filtered_input = 1
-            then Std.Vector.sub_unsafe (filtered_input, 0)
+            then Std.Vector.sub (filtered_input, 0)
             else loop (i - 1, filtered_input)
           end
     in

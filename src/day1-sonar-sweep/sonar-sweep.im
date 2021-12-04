@@ -67,9 +67,9 @@ val (window_num_increases, _) = Std.Vector.fold_index_left (
            val this_window =
                if (idx + 2) < (Std.Vector.length numbers)
                then // I have a window so sum it
-                 Some (Std.Vector.sub_unsafe (numbers, idx)
-                       + Std.Vector.sub_unsafe (numbers, idx + 1)
-                       + Std.Vector.sub_unsafe (numbers, idx + 2))
+                 Some (Std.Vector.sub (numbers, idx)
+                       + Std.Vector.sub (numbers, idx + 1)
+                       + Std.Vector.sub (numbers, idx + 2))
                else None
          in
            case (prev_window, this_window) of
