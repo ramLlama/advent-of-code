@@ -1,0 +1,180 @@
+open BeyondBasis.Pervasive
+
+structure TimerMap = Citroen.Imperative.HashMap.Make (type key = int
+                                                      val hash = Std.Utilities.hash
+                                                      val equals = op=)
+
+val line = ((Std.Vector.sub (Util.get_args 1, 0))
+            |> Std.Option.Unsafe.get
+            |> Util.file_to_lines)
+           <\ Std.Vector.Unsafe.sub \> 0
+
+val fish_timers = (Std.String.split (line, #","))
+                  <\ Std.List.map \> (Std.Result.Unsafe.get_ok o Std.Int.from_string)
+
+val _ = println (Std.String.concat [
+                    "Starting with ",
+                    Std.List.length fish_timers |> Std.Int.to_string,
+                    " fish"
+                ])
+
+fun simulate (fish_timers, current_day, num_days) =
+    if current_day < num_days
+    then
+      let
+        val _ = println (Std.String.concat [
+                            "Day ",
+                            Std.Int.to_string current_day,
+                            ": ",
+                            Std.List.length fish_timers |> Std.Int.to_string,
+                            " fish."
+                        ])
+
+        val num_new_fish = Std.List.fold_left (
+              fish_timers,
+              0,
+              fn (timer, acc) =>
+                 if timer = 0
+                 then acc + 1
+                 else acc
+            )
+        val new_fish_timers = Std.List.map (
+              fish_timers,
+              fn timer =>
+                 if timer = 0
+                 then 6
+                 else timer - 1
+            )
+      in
+        simulate (
+          (Std.List.tabulate (num_new_fish, fn _ => 8)) @ new_fish_timers,
+          current_day + 1,
+          num_days
+        )
+      end
+    else
+      let
+        val _ = println (Std.String.concat [
+                            "Day ",
+                            Std.Int.to_string current_day,
+                            ": ",
+                            Std.List.length fish_timers |> Std.Int.to_string,
+                            " fish."
+                        ])
+      in
+        Std.List.length fish_timers
+      end
+
+val num_days = 80
+val num_fish = simulate (fish_timers, 0, num_days)
+val _ = println (Std.String.concat [
+                    "part 1: After ",
+                    Std.Int.to_string num_days,
+                    " days, there are ",
+                    Std.Int.to_string num_fish,
+                    " fish."])
+
+val timer_map: int TimerMap.t = TimerMap.new ()
+val _ = Std.List.app (
+      fish_timers,
+      fn timer =>
+         case TimerMap.get (timer_map, timer) of
+           | Some (_, num_fish) => TimerMap.set (timer_map, timer, num_fish + 1)
+           | None => TimerMap.set (timer_map, timer, 1)
+         end
+    )
+
+val timer_list = (Std.Int.range (8, ~1, ~1))
+                 |> Std.Result.Unsafe.get_ok
+                 |> Std.Iterator.to_list
+
+fun timer_map_to_string map =
+    let
+      val counts = Std.List.fold_left (
+            timer_list,
+            [],
+            fn (timer, acc) =>
+               (Std.String.concat [
+                   Std.Int.to_string timer,
+                   ": ",
+                   (TimerMap.get (map, timer))
+                   <\ Std.Option.get \> (timer, 0)
+                                        |> #2
+                                        |> Std.Int.to_string
+               ]) :: acc
+          )
+    in
+      Std.String.concat [
+        "{",
+        Std.String.concat_with (counts, ", "),
+        "}"
+      ]
+    end
+
+fun count_fish map =
+    TimerMap.fold (map,
+                   0,
+                   fn (_, num_fish, acc) => acc + num_fish)
+
+fun simulate_fast (map, current_day, num_days) =
+    let
+      val _ = println (Std.String.concat [
+                          "Day ",
+                          Std.Int.to_string current_day,
+                          ": ",
+                          count_fish map |> Std.Int.to_string,
+                          " ",
+                          timer_map_to_string map
+                      ])
+    in
+
+      if current_day < num_days
+      then
+        let
+          val num_new_fish = case TimerMap.get (map, 0) of
+                               | Some (_, n) => n
+                               | None => 0
+                             end
+
+          fun update_timers () =
+              let
+                val _ = Std.List.fold_left (
+                      timer_list,
+                      0,
+                      fn (timer, prev_timer_num_fish) =>
+                         case TimerMap.get (map, timer) of
+                           | Some (_, n) => (TimerMap.set (map, timer, prev_timer_num_fish);
+                                             n)
+                           | None => (TimerMap.set (map, timer, prev_timer_num_fish);
+                                      0)
+                         end
+                    )
+                val reset_timer = 6
+              in
+                case TimerMap.get (map, reset_timer) of
+                  | Some (_, n) => TimerMap.set (map, reset_timer, n + num_new_fish)
+                  | None => TimerMap.set (map, reset_timer, num_new_fish)
+                end
+              end
+
+        in
+          update_timers ();
+          TimerMap.set (map, 8, num_new_fish);
+          simulate_fast (map, current_day + 1, num_days)
+        end
+      else TimerMap.fold (
+          map,
+          0,
+          fn (_, num_fish, acc) =>
+             acc + num_fish
+        )
+    end
+
+val num_days = 256
+val num_fish = simulate_fast (timer_map, 0, num_days)
+val _ = println (Std.String.concat [
+                    "part 2: After ",
+                    Std.Int.to_string num_days,
+                    " days, there are ",
+                    Std.Int.to_string num_fish,
+                    " fish."])
