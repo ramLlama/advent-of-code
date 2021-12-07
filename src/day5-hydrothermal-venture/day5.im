@@ -1,0 +1,183 @@
+open BeyondBasis.Pervasive
+
+structure PointMap = Citroen.Imperative.HashMap.Make (type key = int * int
+                                                      val hash = Std.Utilities.hash
+                                                      val equals = op=)
+
+val lines = (Std.Vector.sub (Util.get_args 1, 0)) |> Std.Option.Unsafe.get |> Util.file_to_lines
+val () = print (Std.String.concat [
+                   "Got ",
+                   (Std.Int.to_string o Std.Vector.length) lines,
+                   " lines\n"
+               ])
+
+fun parse_line line =
+    let
+      fun parse_point point =
+          case Std.String.split (point, #",") of
+            | [x, y] => (Std.Int.from_string x |> Std.Result.Unsafe.get_ok,
+                         Std.Int.from_string y |> Std.Result.Unsafe.get_ok)
+            | _ => raise Fail (
+                  Std.String.concat ["Failed to parse ", point, " in line ", line]
+                )
+          end
+
+      val (from, to) = case Std.String.split (line, #" ") of
+                         | [from, "->", to] => (from, to)
+                         | _ => raise Fail ("Failed to parse " ^ line)
+                       end
+    in
+      (parse_point from, parse_point to)
+    end
+
+fun process_straight_line (map, hold_coord, vary_coord0, vary_coord1, hold_coord_is_x) =
+    let
+      val (from_x, from_y, to_x, to_y) = if hold_coord_is_x
+                                         then (hold_coord, vary_coord0, hold_coord, vary_coord1)
+                                         else (vary_coord0, hold_coord, vary_coord1, hold_coord)
+      val _ = Std.Debug.println (Std.String.concat [
+                                    "Processing straight line (",
+                                    Std.Int.to_string from_x,
+                                    ", ",
+                                    Std.Int.to_string from_y,
+                                    ") -> (",
+                                    Std.Int.to_string to_x,
+                                    ", ",
+                                    Std.Int.to_string to_y,
+                                    ")"
+                                ])
+
+      val (lower_vary, upper_vary) = if vary_coord0 < vary_coord1
+                                     then (vary_coord0, vary_coord1)
+                                     else (vary_coord1, vary_coord0)
+    in
+      Std.Iterator.app (
+        Std.Int.range (lower_vary, upper_vary + 1, 1) |> Std.Result.Unsafe.get_ok,
+        fn vary_coord =>
+           let
+             val (x, y) = if hold_coord_is_x
+                          then (hold_coord, vary_coord)
+                          else (vary_coord, hold_coord)
+             val _ = Std.Debug.println (Std.String.concat [
+                                           "  (",
+                                           Std.Int.to_string x,
+                                           ", ",
+                                           Std.Int.to_string y,
+                                           ")"
+                                       ])
+           in
+             case PointMap.get (map, (x, y)) of
+               | Some (_, inters) => PointMap.set (map, (x, y), inters + 1)
+               | None => PointMap.set (map, (x, y), 1)
+             end
+           end
+      )
+    end
+
+fun process_diagonal_line (map, from_x, from_y, to_x, to_y) =
+    let
+      val _ = Std.Debug.println (Std.String.concat [
+                                    "Processing diagonal line (",
+                                    Std.Int.to_string from_x,
+                                    ", ",
+                                    Std.Int.to_string from_y,
+                                    ") -> (",
+                                    Std.Int.to_string to_x,
+                                    ", ",
+                                    Std.Int.to_string to_y,
+                                    ")"
+                                ])
+
+      val x_incr = if from_x < to_x
+                   then 1
+                   else ~1
+      val xs = Std.Int.range (from_x, to_x + x_incr, x_incr)
+               |> Std.Result.Unsafe.get_ok
+               |> Std.Iterator.to_list
+
+      val y_incr = if from_y < to_y
+                   then 1
+                   else ~1
+      val ys = Std.Int.range (from_y, to_y + y_incr, y_incr)
+               |> Std.Result.Unsafe.get_ok
+               |> Std.Iterator.to_list
+
+      val points = Std.List.zip (xs, ys)
+    in
+      Std.List.app (
+        points,
+        fn (x, y) =>
+           let
+             val _ = Std.Debug.println (Std.String.concat [
+                                           "  (",
+                                           Std.Int.to_string x,
+                                           ", ",
+                                           Std.Int.to_string y,
+                                           ")"
+                                       ])
+           in
+             case PointMap.get (map, (x, y)) of
+               | Some (_, inters) => PointMap.set (map, (x, y), inters + 1)
+               | None => PointMap.set (map, (x, y), 1)
+             end
+           end
+      )
+    end
+
+val map: int PointMap.t = PointMap.new ()
+val _ = Std.Vector.app (
+      lines,
+      fn line =>
+         let
+           val ((from_x, from_y), (to_x, to_y)) = parse_line line
+         in
+           if from_x = to_x
+           then // vertical line
+             process_straight_line (map, from_x, from_y, to_y, true)
+           else if from_y = to_y
+           then // horizontal line
+             process_straight_line (map, from_y, from_x, to_x, false)
+           else // diagonal line, ignore.
+             ()
+         end
+    )
+
+// now just to count the number of >1 intersections
+val num_overlaps = PointMap.fold (
+      map,
+      0,
+      fn (_, inters, acc) =>
+         if inters > 1
+         then acc + 1
+         else acc
+    )
+val _ = println ("part1: Found " ^ (Std.Int.to_string num_overlaps) ^ " overlaps")
+
+val map: int PointMap.t = PointMap.new ()
+val _ = Std.Vector.app (
+      lines,
+      fn line =>
+         let
+           val ((from_x, from_y), (to_x, to_y)) = parse_line line
+         in
+           if from_x = to_x
+           then // vertical line
+             process_straight_line (map, from_x, from_y, to_y, true)
+           else if from_y = to_y
+           then // horizontal line
+             process_straight_line (map, from_y, from_x, to_x, false)
+           else // diagonal line, ignore.
+             process_diagonal_line (map, from_x, from_y, to_x, to_y)
+         end
+    )
+
+// now just to count the number of >1 intersections
+val num_overlaps = PointMap.fold (
+      map,
+      0,
+      fn (_, inters, acc) =>
+         if inters > 1
+         then acc + 1
+         else acc
+    )
+val _ = println ("part2: Found " ^ (Std.Int.to_string num_overlaps) ^ " overlaps")

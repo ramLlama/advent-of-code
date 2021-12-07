@@ -1,0 +1,9 @@
+local
+   $(BEYOND_BASIS)
+   $(GETOPT)
+   $(CITROEN)
+
+   ../util/sources.mlb
+in
+   day5.im
+end
