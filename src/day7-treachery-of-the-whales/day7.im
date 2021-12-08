@@ -1,0 +1,99 @@
+open BeyondBasis.Pervasive
+
+structure TimerMap = Citroen.Imperative.HashMap.Make (type key = int
+                                                      val hash = Std.Utilities.hash
+                                                      val equals = op=)
+
+val line = ((Std.Vector.sub (Util.get_args 1, 0))
+            |> Std.Option.Unsafe.get
+            |> Util.file_to_lines)
+           <\ Std.Vector.Unsafe.sub \> 0
+
+val positions = (Std.String.split (line, #","))
+                <\ Std.List.map \> (Std.Result.Unsafe.get_ok o Std.Int.from_string)
+
+val (min_pos, max_pos) = Std.List.fold_left (
+      positions,
+      let
+        val first = Std.List.head positions |> Std.Option.Unsafe.get
+      in
+        (first, first)
+      end,
+      fn (v, (min, max)) =>
+         let
+           val new_min = if v < min
+                         then v
+                         else min
+           val new_max = if v > max
+                         then v
+                         else max
+         in
+           (new_min, new_max)
+         end
+    )
+
+val (cheapest_pos, cheapest_cost) = Std.Iterator.fold_left (
+      Std.Int.range (min_pos, max_pos + 1, 1) |> Std.Result.Unsafe.get_ok,
+      (min_pos, Std.Int.max_value |> Std.Option.Unsafe.get),
+      fn (pos, cur_best as (cur_best_pos, cur_best_cost)) =>
+         let
+           val cost = Std.List.fold_left (
+                 positions,
+                 0,
+                 fn (sub_pos, acc) =>
+                    acc + Std.Int.abs (sub_pos - pos)
+               )
+           val _ = Std.Debug.println (Std.String.concat [
+                                         "Pos ",
+                                         Std.Int.to_string pos,
+                                         " has cost ",
+                                         Std.Int.to_string cost
+                                     ])
+         in
+           if cost < cur_best_cost
+           then (pos, cost)
+           else cur_best
+         end
+    )
+
+val _ = println (Std.String.concat [
+                    "part 1: Best pos is ",
+                    Std.Int.to_string cheapest_pos,
+                    " at cost ",
+                    Std.Int.to_string cheapest_cost
+                ])
+
+val (cheapest_pos, cheapest_cost) = Std.Iterator.fold_left (
+      Std.Int.range (min_pos, max_pos + 1, 1) |> Std.Result.Unsafe.get_ok,
+      (min_pos, Std.Int.max_value |> Std.Option.Unsafe.get),
+      fn (pos, cur_best as (cur_best_pos, cur_best_cost)) =>
+         let
+           val cost = Std.List.fold_left (
+                 positions,
+                 0,
+                 fn (sub_pos, acc) =>
+                    let
+                      val dist = Std.Int.abs (sub_pos - pos)
+                    in
+                      acc + (dist * (dist + 1) div 2)
+                    end
+               )
+           val _ = Std.Debug.println (Std.String.concat [
+                                         "Pos ",
+                                         Std.Int.to_string pos,
+                                         " has cost ",
+                                         Std.Int.to_string cost
+                                     ])
+         in
+           if cost < cur_best_cost
+           then (pos, cost)
+           else cur_best
+         end
+    )
+
+val _ = println (Std.String.concat [
+                    "part 2: Best pos is ",
+                    Std.Int.to_string cheapest_pos,
+                    " at cost ",
+                    Std.Int.to_string cheapest_cost
+                ])
