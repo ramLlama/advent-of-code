@@ -1,0 +1,421 @@
+open BeyondBasis.Pervasive
+
+structure DispState = struct
+  type t = bool Std.Vector.t
+
+  val disp_size = 7
+  val base_char = #"a"
+
+  val number_displays: t Std.Vector.t = Std.Vector.from_list [
+        // 0
+        Std.Vector.from_list
+         [      true,
+           true,     true,
+                false,
+           true,     true,
+                true      ],
+        // 1
+        Std.Vector.from_list
+         [      false,
+           false,     true,
+                false,
+           false,     true,
+                false      ],
+        // 2
+        Std.Vector.from_list
+         [      true,
+           false,     true,
+                true,
+           true,     false,
+                true      ],
+        // 3
+        Std.Vector.from_list
+         [      true,
+           false,     true,
+                true,
+           false,     true,
+                true      ],
+        // 4
+        Std.Vector.from_list
+         [      false,
+           true,     true,
+                true,
+           false,     true,
+                false      ],
+        // 5
+        Std.Vector.from_list
+         [      true,
+           true,     false,
+                true,
+           false,     true,
+                true      ],
+        // 6
+        Std.Vector.from_list
+         [      true,
+           true,     false,
+                true,
+           true,     true,
+                true      ],
+        // 7
+        Std.Vector.from_list
+         [      true,
+           false,     true,
+                false,
+           false,     true,
+                false      ],
+        // 8
+        Std.Vector.from_list
+         [      true,
+           true,     true,
+                true,
+           true,     true,
+                true      ],
+        // 9
+        Std.Vector.from_list
+         [      true,
+           true,     true,
+                true,
+           false,     true,
+                true      ]
+      ]
+
+  val to_string =
+      Std.Debug.ToString.vector_to_string (fn on => if on then "#" else "_")
+
+  fun from_string s =
+      let
+        val state = Std.Array.new (disp_size, false)
+        val _ = Std.List.app (
+              Std.String.explode s,
+              fn c =>
+                 Std.Array.Unsafe.set (state, Std.Char.to_int c - Std.Char.to_int base_char, true)
+            )
+        val result = Std.Array.to_vector state
+      in
+        Std.Debug.println (Std.String.concat [
+                              "Parsed state ",
+                              s,
+                              " to ",
+                              to_string result
+                          ]);
+        result
+      end
+
+  fun num_segments_set state =
+      Std.Vector.fold_left (
+        state,
+        0,
+        fn (v, acc) =>
+           acc + (if v then 1 else 0)
+      )
+
+  structure SetOps = struct
+    fun union sts =
+        Std.Vector.tabulate (
+          disp_size,
+          fn i =>
+             Std.List.fold_left (
+                 sts,
+                 false,
+                 fn (st, acc) =>
+                    acc orelse Std.Vector.Unsafe.sub (st, i)
+               )
+        )
+    val union = Std.Debug.wrap1 (
+          fn sts =>
+             Std.Debug.print ("union ("
+                              ^ Std.Debug.ToString.list_to_string to_string sts
+                              ^ ")"),
+          fn result =>
+             Std.Debug.println (" = " ^ to_string result),
+          union
+        )
+
+    fun inter sts =
+        Std.Vector.tabulate (
+          disp_size,
+          fn i =>
+             Std.List.fold_left (
+                 sts,
+                 true,
+                 fn (st, acc) =>
+                    acc andalso Std.Vector.Unsafe.sub (st, i)
+               )
+        )
+    val inter = Std.Debug.wrap1 (
+          fn sts =>
+             Std.Debug.print ("inter ("
+                              ^ Std.Debug.ToString.list_to_string to_string sts
+                              ^ ")"),
+          fn result =>
+             Std.Debug.println (" = " ^ to_string result),
+          inter
+        )
+
+    fun diff sts =
+        let
+          val (first, rest) = case sts of
+                                | first :: rest => (first, rest)
+                                | _ => raise Fail "Subtracting a single state"
+                              end
+        in
+          Std.Vector.tabulate (
+            disp_size,
+            fn i =>
+               Std.List.fold_left (
+                   rest,
+                   Std.Vector.Unsafe.sub (first, i),
+                   fn (st, acc) =>
+                      acc andalso (not o Std.Vector.Unsafe.sub) (st, i)
+                 )
+          )
+        end
+    val diff = Std.Debug.wrap1 (
+          fn sts =>
+             Std.Debug.print ("diff ("
+                              ^ Std.Debug.ToString.list_to_string to_string sts
+                              ^ ")"),
+          fn result =>
+             Std.Debug.println (" = " ^ to_string result),
+          diff
+        )
+
+    fun compl st =
+        Std.Vector.tabulate (
+          disp_size,
+          fn i =>
+             (not o Std.Vector.Unsafe.sub) (st, i)
+        )
+    val compl = Std.Debug.wrap1 (
+          fn st =>
+             Std.Debug.print ("compl (" ^ to_string st ^ ")"),
+          fn result =>
+             Std.Debug.println (" = " ^ to_string result),
+          compl
+        )
+  end
+
+
+  (**
+   * unique groups (#segments set -> numbers):
+   * 0 -> N/A
+   * 1 -> N/A
+   * 2 -> 1
+   * 3 -> 7
+   * 4 -> 4
+   * 5 -> 2, 3, 5
+   * 6 -> 0, 6, 9
+   * 7 -> 8
+   *
+   * 0: g3U - g2U
+   * 1: g4U - g2U - g5I
+   * 2: g6'U & g3U
+   * 3: (g4U - g2U) & g5I
+   * 4: g6'U - g4U
+   * 5: g6'U & g2U
+   * 6: g5I - g3U - g4U
+   *)
+  val decode: t Std.Vector.t -> int Std.Vector.t =
+   fn sample =>
+      let
+        val {g2, g3, g4, g5, g6, g7} = Std.Vector.fold_left (
+              sample,
+              {g2 = [], g3 = [], g4 = [], g5 = [], g6 = [], g7 = []},
+              fn (st, {g2, g3, g4, g5, g6, g7}) =>
+                 case num_segments_set st of
+                   | 2 => {g2 = st :: g2, g3, g4, g5, g6, g7}
+                   | 3 => {g2, g3 = st :: g3, g4, g5, g6, g7}
+                   | 4 => {g2, g3, g4 = st :: g4, g5, g6, g7}
+                   | 5 => {g2, g3, g4, g5 = st :: g5, g6, g7}
+                   | 6 => {g2, g3, g4, g5, g6 = st :: g6, g7}
+                   | 7 => {g2, g3, g4, g5, g6, g7 = st :: g7}
+                   | _ => raise Fail "unexpected number of segments set"
+                 end
+            )
+        val _ = Std.Debug.println (
+              Std.String.concat [
+                "Found groups ",
+                "\n  2: ", Std.Debug.ToString.list_to_string to_string g2,
+                "\n  3: ", Std.Debug.ToString.list_to_string to_string g3,
+                "\n  4: ", Std.Debug.ToString.list_to_string to_string g4,
+                "\n  5: ", Std.Debug.ToString.list_to_string to_string g5,
+                "\n  6: ", Std.Debug.ToString.list_to_string to_string g6,
+                "\n  7: ", Std.Debug.ToString.list_to_string to_string g7
+              ]
+            )
+
+        val real_to_scrambled = [
+          // 0: g3U - g2U
+          (Std.Debug.println (" -- 0 -- ");
+           SetOps.diff [SetOps.union g3, SetOps.union g2]),
+
+          // 1: (g4U - g2U) - g5I
+          (Std.Debug.println (" -- 1 -- ");
+           SetOps.diff [SetOps.union g4, SetOps.union g2, SetOps.inter g5]),
+
+          // 2: g6'U & g3U
+          (Std.Debug.println (" -- 2 -- ");
+           SetOps.inter [SetOps.union (Std.List.map (g6, SetOps.compl)), SetOps.union g3]),
+
+          // 3: (g4U - g2U) & g5I
+          (Std.Debug.println (" -- 3 -- ");
+           SetOps.inter [SetOps.diff [SetOps.union g4, SetOps.union g2], SetOps.inter g5]),
+
+          // 4: g6'U - g4U
+          (Std.Debug.println (" -- 4 -- ");
+           SetOps.diff [SetOps.union (Std.List.map (g6, SetOps.compl)), SetOps.union g4]),
+
+          // 5: g2U - (g6'U & g2U)
+          (Std.Debug.println (" -- 5 -- ");
+           SetOps.diff [
+             SetOps.union g2,
+             SetOps.inter [SetOps.union (Std.List.map (g6, SetOps.compl)), SetOps.union g2]
+           ]),
+
+          // 6: g5I - g3U - g4U
+          (Std.Debug.println (" -- 6 -- ");
+           SetOps.diff [SetOps.inter g5, SetOps.union g3, SetOps.union g4])
+        ]
+        val _ = Std.Debug.println (
+              Std.String.concat [
+                "Calculated real_to_scrambled ",
+                Std.Debug.ToString.list_to_string to_string real_to_scrambled
+              ]
+            )
+
+        val scrambled_to_real = Std.Array.new (disp_size, ~1)
+        val _ = Std.List.app_index (
+              real_to_scrambled,
+              fn (scrambled, real_idx) =>
+                 let
+                   val scrambled_idx = Std.Vector.fold_index_left (
+                         scrambled,
+                         ~1,
+                         fn (v, i, result) =>
+                            if v
+                            then if result <> ~1
+                                 then raise Fail "More than one segment set"
+                                 else i
+                            else result
+                       )
+                   val _ = Std.Debug.println ("Found mapping "
+                                              ^ Std.Int.to_string scrambled_idx
+                                              ^ " -> "
+                                              ^ Std.Int.to_string real_idx)
+                 in
+                   Std.Array.Unsafe.set (scrambled_to_real, scrambled_idx, real_idx)
+                 end
+            )
+      in
+        Std.Array.to_vector scrambled_to_real
+      end
+
+  val translate_to_num: t * int Std.Vector.t -> int =
+   fn (scrambled, mapping) =>
+      let
+        val real = Std.Array.new (disp_size, false)
+        val _ = Std.Vector.app_index (
+              scrambled,
+              fn (set, idx) =>
+                 Std.Array.Unsafe.set (real, Std.Vector.Unsafe.sub (mapping, idx), set)
+            )
+        val real = Std.Array.to_vector real
+
+        val (_, num) = Std.Vector.find_index (number_displays, fn x => x = real)
+                       |> Std.Option.Unsafe.get
+      in
+        num
+      end
+end
+
+val lines = (Std.Vector.sub (Util.get_args 1, 0))
+            |> Std.Option.Unsafe.get
+            |> Util.file_to_lines
+val entries: (DispState.t Std.Vector.t * DispState.t Std.Vector.t) Std.Vector.t =
+    Std.Vector.tabulate (
+      Std.Vector.length lines,
+      fn i =>
+         let
+           val line = Std.Vector.Unsafe.sub (lines, i)
+
+           val (samples_line, display_line) =
+               case Std.String.split (line, #"|") of
+                 | [samples_line, display_line] => (Std.String.trim samples_line,
+                                                    Std.String.trim display_line)
+                 | _ => raise Fail ("Could not parse line " ^ line)
+               end
+           val _ = Std.Debug.println ("Parsed line " ^ samples_line ^ ", " ^ display_line)
+           val samples = ((Std.String.split (samples_line, #" "))
+                          <\ Std.List.map \> DispState.from_string)
+                         |> Std.Vector.from_list
+           val _ = Std.Debug.println ("----")
+           val displays = ((Std.String.split (display_line, #" "))
+                           <\ Std.List.map \> DispState.from_string)
+                          |> Std.Vector.from_list
+           val _ = Std.Debug.println ("========")
+         in
+           (samples, displays)
+         end
+    )
+val _ = println ("Got " ^ (Std.Int.to_string o Std.Vector.length) entries ^ " entries")
+
+val num_unique_digits = Std.Vector.fold_left (
+      entries,
+      0,
+      fn ((_, display_states), acc) =>
+         acc
+         + Std.Vector.fold_left (
+           display_states,
+           0,
+           fn (display_state, acc) =>
+              let
+                val unique_state = case DispState.num_segments_set display_state of
+                                     | 2 | 4 | 3 | 7 => true
+                                     | _ => false
+                                   end
+                val _ = Std.Debug.println (
+                      Std.String.concat [
+                        "state ",
+                        DispState.to_string display_state,
+                        " is unique: ",
+                        Std.Debug.ToString.bool_to_string unique_state
+                      ]
+                    )
+              in
+                acc + (if unique_state then 1 else 0)
+              end
+         )
+    )
+val _ = println ("part 1: Found "
+                 ^ Std.Int.to_string num_unique_digits
+                 ^ " unique digits in display")
+
+val numbers = Std.Vector.tabulate (
+      Std.Vector.length entries,
+      fn i =>
+         let
+           val (samples, display) = Std.Vector.Unsafe.sub (entries, i)
+           val mapping = DispState.decode samples
+           val digits = Std.Vector.map (
+                 display,
+                 fn d =>
+                    DispState.translate_to_num (d, mapping)
+               )
+           val _ = Std.Debug.println ("Parsed digits "
+                              ^ Std.Debug.ToString.vector_to_string Std.Int.to_string digits
+                              ^ " from display");
+           val num = Std.Vector.fold_left (
+                 digits,
+                 0,
+                 fn (d, acc) =>
+                    (acc * 10) + d
+               )
+         in
+           Std.Debug.println ("Parsed number "
+                              ^ Std.Int.to_string num
+                              ^ " from display");
+           num
+         end
+    )
+val _ = println ("part 2: Sum of display is "
+                 ^ Std.Int.to_string (Std.Vector.fold_left (numbers, 0, op+)))
