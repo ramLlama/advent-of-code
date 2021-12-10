@@ -1,0 +1,188 @@
+open BeyondBasis.Pervasive
+
+structure RowColSet = Citroen.Imperative.HashSet.Make (type value = int * int
+                                                       val hash = Std.Utilities.hash
+                                                       val equals = op=)
+
+val lines = (Std.Vector.sub (Util.get_args 1, 0))
+            |> Std.Option.Unsafe.get
+            |> Util.file_to_lines
+
+val num_rows = Std.Vector.length lines
+val num_cols = Std.Vector.Unsafe.sub (lines, 0) |> Std.String.length
+
+val _ = println ("Found "
+                 ^ Std.Int.to_string num_rows
+                 ^ " ⨯ "
+                 ^ Std.Int.to_string num_cols
+                 ^ " heightmap")
+
+val border_value = 9
+val heightmap_iter: int iter iter =
+    Std.Iterator.from_list (
+      [
+        // header row
+        (Std.Iterator.repeat border_value)
+        <\ Std.Iterator.take \>
+         num_cols + 2
+      ]
+
+      @
+
+      // data rows
+      ((Std.Vector.to_iter lines
+        |> Std.Iterator.to_list)
+       <\ Std.List.map \>
+        (fn s =>
+            ((Std.String.explode s)
+             |> Std.Iterator.from_list)
+            <\ Std.Iterator.map \>
+             (fn c =>
+                 (Std.String.implode [c])
+                 |> Std.Int.from_string
+                 |> Std.Result.Unsafe.get_ok)
+            <\ Std.Iterator.prepend \>
+             border_value
+            <\ Std.Iterator.postpend \>
+             border_value))
+
+      @
+
+      // footer row
+      [
+        (Std.Iterator.repeat border_value)
+        <\ Std.Iterator.take \>
+         num_cols + 2
+      ]
+    )
+
+val heightmap =
+    (heightmap_iter
+     <\ Std.Iterator.map \>
+      Std.Vector.from_iter)
+    |> Std.Vector.from_iter
+
+val _ = Std.Debug.println (
+      Std.Debug.ToString.vector_to_string
+        (fn vec =>
+            (Std.Debug.ToString.vector_to_string Std.Int.to_string vec) ^ "\n")
+        heightmap
+    )
+
+fun eval_point (row, col) =
+    let
+      val _ = Std.Debug.println ("Evaluating point at ("
+                                 ^ Std.Int.to_string row
+                                 ^ ", "
+                                 ^ Std.Int.to_string col
+                                 ^ ")")
+      val point = Std.Vector.Unsafe.sub (Std.Vector.Unsafe.sub (heightmap, row), col)
+      val up = Std.Vector.Unsafe.sub (Std.Vector.Unsafe.sub (heightmap, row - 1), col)
+      val down = Std.Vector.Unsafe.sub (Std.Vector.Unsafe.sub (heightmap, row + 1), col)
+      val left = Std.Vector.Unsafe.sub (Std.Vector.Unsafe.sub (heightmap, row), col - 1)
+      val right = Std.Vector.Unsafe.sub (Std.Vector.Unsafe.sub (heightmap, row), col + 1)
+    in
+      if point < up
+         andalso point < down
+         andalso point < left
+         andalso point < right
+      then (Std.Debug.println (Std.String.concat [
+                                  "  Risky! p = ",
+                                  Std.Int.to_string point,
+                                  ", up = ",
+                                  Std.Int.to_string up,
+                                  ", down = ",
+                                  Std.Int.to_string down,
+                                  ", left = ",
+                                  Std.Int.to_string left,
+                                  ", right = ",
+                                  Std.Int.to_string right
+                              ]);
+            Some (point + 1))
+      else None // no risk
+    end
+
+val (risk_sum, low_points) =
+    Std.Iterator.fold_left (
+      Std.Int.range (1, num_rows + 1, 1) |> Std.Result.Unsafe.get_ok,
+      (0, []),
+      fn (row, (prev_rows_risk_sum, prev_rows_low_points)) =>
+         let
+           val (col_risk_sum, col_low_points) = Std.Iterator.fold_left (
+                 Std.Int.range (1, num_cols + 1, 1) |> Std.Result.Unsafe.get_ok,
+                 (0, []),
+                 fn (col, (col_risk_sum, col_low_points)) =>
+                    case eval_point (row, col) of
+                      | Some risk => (col_risk_sum + risk, (row, col) :: col_low_points)
+                      | None => (col_risk_sum, col_low_points)
+                    end
+               )
+         in
+           (prev_rows_risk_sum + col_risk_sum, prev_rows_low_points @ col_low_points)
+         end
+    )
+
+val _ = Std.Debug.println ("Found low points: "
+                           ^ Std.Debug.ToString.list_to_string
+                               (Std.Debug.ToString.tuple2_to_string (Std.Int.to_string,
+                                                                     Std.Int.to_string))
+                               low_points)
+val _ = println ("part 1: risk sum is " ^ Std.Int.to_string risk_sum)
+
+
+fun get_basin_size (row, col) =
+    let
+      val visited = RowColSet.new ()
+
+      fun explore (row, col) =
+          if RowColSet.contains (visited, (row, col))
+          then // already visited, done
+            ()
+          else
+            let
+              val depth = Std.Vector.Unsafe.sub (Std.Vector.Unsafe.sub (heightmap, row), col)
+            in
+              if depth >= border_value
+              then // border of the basin, done
+                ()
+              else (RowColSet.add (visited, (row, col)) |> ignore;
+                    explore (row - 1, col);
+                    explore (row + 1, col);
+                    explore (row, col - 1);
+                    explore (row, col + 1))
+            end
+    in
+      explore (row, col);
+      RowColSet.length visited
+    end
+
+val basin_sizes =
+    ((Std.Iterator.from_list low_points)
+     <\ Std.Iterator.map \>
+      get_basin_size)
+    |> Std.Vector.from_iter
+
+val _ = Std.Debug.println ("Found basin sizes: "
+                           ^ Std.Debug.ToString.vector_to_string Std.Int.to_string basin_sizes)
+val (first, second, third) = Std.Vector.fold_left (
+      basin_sizes,
+      (0, 0, 0),
+      fn (size, (first, second, third)) =>
+         if size > first
+         then (size, first, second)
+         else if size > second
+         then (first, size, second)
+         else if size > third
+         then (first, second, size)
+         else (first, second, third)
+    )
+val _ = println (Std.String.concat [
+                    "part 2: 1st: ",
+                    Std.Int.to_string first,
+                    ", 2nd: ",
+                    Std.Int.to_string second,
+                    ", 3rd: ",
+                    Std.Int.to_string third,
+                    ", product: ",
+                    Std.Int.to_string (first * second * third)
+                ])
