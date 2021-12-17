@@ -133,14 +133,19 @@ fun step () =
      run_flashes ();
      count_flashes ())
 
-val num_steps = 1000
-val (total_num_flashes, first_sync_step) = Std.Iterator.fold_left (
-      Std.Int.range (1, num_steps + 1, 1) |> Std.Result.Unsafe.get_ok,
-      (0, None),
-      fn (step_num, (total_num_flashes, first_sync_step)) =>
+val num_steps = 100
+val first_sync_step = ref None
+val total_num_flashes = Std.Iterator.fold_left (
+      (Std.Int.count (1, 1))
+      <\ Std.Iterator.take_while \>
+       (fn _ => Std.Option.is_none (!first_sync_step)),
+      0,
+      fn (step_num, acc) =>
          let
            val num_flashes = step ()
-           val total_num_flashes = total_num_flashes + num_flashes
+           val total_num_flashes = if step_num < num_steps
+                                   then acc + num_flashes
+                                   else acc
          in
            Std.Debug.println (Std.String.concat [
                                  "Step ",
@@ -151,12 +156,12 @@ val (total_num_flashes, first_sync_step) = Std.Iterator.fold_left (
                                  Std.Int.to_string total_num_flashes,
                                  " flashes."
                              ]);
-           case first_sync_step of
-             | Some _ => (total_num_flashes, first_sync_step)
-             | None => if num_flashes = num_rows * num_cols
-                       then (total_num_flashes, Some step_num)
-                       else (total_num_flashes, None)
-           end
+
+           if num_flashes = num_rows * num_cols
+           then first_sync_step := Some step_num
+           else ();
+
+           total_num_flashes
          end
     )
 val _ = println ("part 1: After "
@@ -167,5 +172,5 @@ val _ = println ("part 1: After "
 val _ = println ("part 2: After "
                  ^ Std.Int.to_string num_steps
                  ^ ", the first sync step was step "
-                 ^ Std.Int.to_string (Std.Option.Unsafe.get first_sync_step)
+                 ^ Std.Int.to_string (Std.Option.Unsafe.get (!first_sync_step))
                  ^ ".")
