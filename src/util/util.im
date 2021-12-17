@@ -24,8 +24,7 @@ structure Util = struct
       let
         val file = case Std.Filesystem.File.open_path (
                        path,
-                       Std.Filesystem.OpenOptions.new ()
-                       <\ Std.Filesystem.OpenOptions.read \> true
+                       Std.Filesystem.OpenOptions.new () </ Std.Filesystem.OpenOptions.read /> true
                      ) of
                      | Ok f => f
                      | Error _ => raise Fail ("Failed to open file at " ^ path)

@@ -8,8 +8,8 @@ val energies = Std.Array.map (
       Std.Array.from_vector lines,
       fn line =>
          ((Std.String.explode line)
-          <\ Std.List.map \>
-           (fn c => c |> Std.Char.to_string |> Std.Int.from_string |> Std.Result.Unsafe.get_ok))
+          </ Std.List.map />
+          (fn c => c |> Std.Char.to_string |> Std.Int.from_string |> Std.Result.Unsafe.get_ok))
          |> Std.Array.from_list
     )
 val num_rows = Std.Array.length energies
@@ -136,9 +136,9 @@ fun step () =
 val num_steps = 100
 val first_sync_step = ref None
 val total_num_flashes = Std.Iterator.fold_left (
-      (Std.Int.count (1, 1))
-      <\ Std.Iterator.take_while \>
-       (fn _ => Std.Option.is_none (!first_sync_step)),
+      Std.Int.count (1, 1)
+      </ Std.Iterator.take_while />
+      (fn _ => Std.Option.is_none (!first_sync_step)),
       0,
       fn (step_num, acc) =>
          let
