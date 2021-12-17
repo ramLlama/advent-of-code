@@ -1,0 +1,171 @@
+open BeyondBasis.Pervasive
+
+val lines = (Std.Vector.sub (Util.get_args 1, 0))
+            |> Std.Option.Unsafe.get
+            |> Util.file_to_lines
+
+val energies = Std.Array.map (
+      Std.Array.from_vector lines,
+      fn line =>
+         ((Std.String.explode line)
+          <\ Std.List.map \>
+           (fn c => c |> Std.Char.to_string |> Std.Int.from_string |> Std.Result.Unsafe.get_ok))
+         |> Std.Array.from_list
+    )
+val num_rows = Std.Array.length energies
+val num_cols = Std.Array.length (Std.Array.Unsafe.sub (energies, 0))
+
+val _ = println ("Parsed energy matrix of size "
+                 ^ Std.Int.to_string num_rows
+                 ^ "⨯"
+                 ^ Std.Int.to_string num_cols)
+
+fun energies_to_string () =
+    let
+      val lines = Std.List.tabulate (
+            num_rows,
+            fn r =>
+               let
+                 val row = Std.Array.Unsafe.sub (energies, r)
+               in
+                 Std.List.tabulate (
+                   num_cols,
+                   fn c =>
+                      let
+                        val e = Std.Array.Unsafe.sub (row, c)
+                      in
+                        if e = 0
+                        then "\027[1m0\027[0m"
+                        else Std.Int.to_string e
+                      end
+                 )
+               end
+          )
+    in
+      Std.String.concat_with (
+        Std.List.map (lines, fn line => Std.String.concat_with (line, " ")),
+        "\n"
+      )
+    end
+
+fun get_neighbors (row, col) =
+    Std.Iterator.fold_left (
+      Std.Int.range (row - 1, row + 2, 1) |> Std.Result.Unsafe.get_ok,
+      [],
+      fn (r, neighbors) =>
+         if 0 <= r andalso r < num_rows
+         then Std.Iterator.fold_left (
+             Std.Int.range (col - 1, col + 2, 1) |> Std.Result.Unsafe.get_ok,
+             [],
+             fn (c, row_neighbors) =>
+                if 0 <= c andalso c < num_cols
+                then (r, c) :: row_neighbors
+                else row_neighbors
+           ) @ neighbors
+         else neighbors
+    )
+
+fun incr_all_energies () =
+    Std.Array.app (
+      energies,
+      fn row => Std.Array.mutate (row, fn e => e + 1)
+    )
+
+fun incr_neighboring_energies (row, col) =
+    Std.List.app (
+      get_neighbors (row, col),
+      fn (r, c) =>
+         let
+           val cur_energy = Std.Array.Unsafe.sub (Std.Array.Unsafe.sub (energies, r), c)
+         in
+           if cur_energy = 0
+           then // this already flashed, so don't increment
+             ()
+           else Std.Array.Unsafe.set (Std.Array.Unsafe.sub (energies, r), c, cur_energy + 1)
+         end
+    )
+
+fun run_flashes () =
+    let
+      val flashed = Std.Array.fold_index_left (
+            energies,
+            false,
+            fn (row, r, flashed) =>
+               flashed
+               orelse Std.Array.fold_index_left (
+                 row,
+                 false,
+                 fn (energy, c, row_flashed) =>
+                    if energy > 9
+                    then // this one flashes, so set to zero and propagate
+                      (Std.Array.Unsafe.set (Std.Array.Unsafe.sub (energies, r), c, 0);
+                       incr_neighboring_energies (r, c);
+                       true)
+                    else row_flashed
+               )
+          )
+    in
+      if flashed
+      then // recurse, others might be flashing now
+        run_flashes ()
+      else ()
+    end
+
+fun count_flashes () =
+    Std.Array.fold_left (
+      energies,
+      0,
+      fn (row, acc) =>
+         acc
+         + Std.Array.fold_left (
+           row,
+           0,
+           fn (energy, row_acc) =>
+              if energy = 0
+              then row_acc + 1
+              else row_acc
+         )
+    )
+
+fun step () =
+    (println (energies_to_string ());
+     incr_all_energies ();
+     run_flashes ();
+     count_flashes ())
+
+val num_steps = 1000
+val (total_num_flashes, first_sync_step) = Std.Iterator.fold_left (
+      Std.Int.range (1, num_steps + 1, 1) |> Std.Result.Unsafe.get_ok,
+      (0, None),
+      fn (step_num, (total_num_flashes, first_sync_step)) =>
+         let
+           val num_flashes = step ()
+           val total_num_flashes = total_num_flashes + num_flashes
+         in
+           Std.Debug.println (Std.String.concat [
+                                 "Step ",
+                                 Std.Int.to_string step_num,
+                                 ": ",
+                                 Std.Int.to_string num_flashes,
+                                 " flashes, total so far ",
+                                 Std.Int.to_string total_num_flashes,
+                                 " flashes."
+                             ]);
+           case first_sync_step of
+             | Some _ => (total_num_flashes, first_sync_step)
+             | None => if num_flashes = num_rows * num_cols
+                       then (total_num_flashes, Some step_num)
+                       else (total_num_flashes, None)
+           end
+         end
+    )
+val _ = println ("part 1: After "
+                 ^ Std.Int.to_string num_steps
+                 ^ ", there were "
+                 ^ Std.Int.to_string total_num_flashes
+                 ^ " flashes.")
+val _ = println ("part 2: After "
+                 ^ Std.Int.to_string num_steps
+                 ^ ", the first sync step was step "
+                 ^ Std.Int.to_string (Std.Option.Unsafe.get first_sync_step)
+                 ^ ".")
