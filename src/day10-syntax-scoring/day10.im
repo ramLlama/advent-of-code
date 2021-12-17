@@ -1,0 +1,95 @@
+open BeyondBasis.Pervasive
+
+structure DA = Citroen.Imperative.DynamicArray
+
+val lines = (Std.Vector.sub (Util.get_args 1, 0))
+            |> Std.Option.Unsafe.get
+            |> Util.file_to_lines
+
+datatype score = Corrupt of int | Incomplete of int
+
+fun score_for_line line =
+    let
+      fun score_maybe_corrupt_closer (opener, closer) =
+          case (opener, closer) of
+            | (#"(", #")") | (#"[", #"]") | (#"{", #"}") | (#"<", #">") => None
+            | _ => Some (case closer of
+                           | #")" => 3
+                           | #"]" => 57
+                           | #"}" => 1197
+                           | #">" => 25137
+                           | _ => raise Fail ("Unknown closer " ^ Std.String.implode [closer])
+                         end)
+          end
+
+      fun score_incomplete_closer (opener, s) =
+          s * 5
+          + (case opener of
+               | #"(" => 1
+               | #"[" => 2
+               | #"{" => 3
+               | #"<" => 4
+               | _ => raise Fail ("Unknown opener " ^ Std.Char.to_string opener)
+             end)
+
+      fun loop (cs: char list): char * char list * score option =
+          case cs of
+            | (opener as (#"(" | #"[" | #"{" | #"<")) :: rest =>
+                let
+                  val (closer, rest, score) = loop rest
+                  val _ = Std.Debug.println (Std.String.concat [
+                                                "Comparing ",
+                                                Std.Char.to_string opener,
+                                                " ",
+                                                Std.Char.to_string closer
+                                            ])
+                in
+                  case score of
+                    | Some (Corrupt s) => // already found a corruption further down
+                        (#"P", [], score)
+                    | Some (Incomplete s) => // we need to calculate incompleteness
+                        (#"I", [], (Some o Incomplete o score_incomplete_closer) (opener, s))
+                    | None => case score_maybe_corrupt_closer (opener, closer) of
+                                | None => loop rest // this is a match, continue
+                                | Some s => (#"C", [], Some (Corrupt s))
+                              end
+                  end
+                end
+
+            | (closer as (#")" | #"]" | #"}" | #">")) :: rest => (closer, rest, None)
+
+            | [] => (#"F", [], Some (Incomplete 0)) // finished scanning
+
+            | c :: _ => raise Fail ("Unknown opener " ^ Std.String.implode [c])
+          end
+
+      val score = (Std.String.explode line) |> loop |> #3 |> Std.Option.Unsafe.get
+    in
+      Std.Debug.println (Std.String.concat [
+                            case score of
+                              | Corrupt s => "corrupt " ^ Std.Int.to_string s
+                              | Incomplete s => "incomplete " ^ Std.Int.to_string s
+                            end,
+                            "   ",
+                            line]);
+      score
+    end
+
+val (corruption_score, incomplete_scores) = Std.Vector.fold_left (
+      lines,
+      (0, DA.new0 ()),
+      fn (line, (corruption, incompletes)) =>
+         case score_for_line line of
+           | Corrupt s => (corruption + s, incompletes)
+           | Incomplete s => (DA.push (incompletes, s);
+                              (corruption, incompletes))
+         end
+    )
+
+val _ = println ("part 1: Got a corruption score of " ^ Std.Int.to_string corruption_score)
+
+val _ = DA.sort (incomplete_scores, op<=)
+val _ = println (
+      "part 2: Got a middle incomplete score of "
+      ^ Std.Int.to_string (DA.Unsafe.sub (incomplete_scores, DA.length incomplete_scores div 2))
+    )
