@@ -128,7 +128,7 @@ fun count_flashes () =
     )
 
 fun step () =
-    (println (energies_to_string ());
+    (Std.Debug.println (energies_to_string ());
      incr_all_energies ();
      run_flashes ();
      count_flashes ())
