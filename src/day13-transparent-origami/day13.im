@@ -1,0 +1,160 @@
+open BeyondBasis.Pervasive
+
+structure PS = Citroen.Imperative.HashSet.Make (type value = int * int
+                                                val hash = Std.Utilities.hash
+                                                val equals = op=)
+
+val lines = (Std.Vector.sub (Util.get_args 1, 0))
+            |> Std.Option.Unsafe.get
+            |> Util.file_to_lines
+
+fun parse_point line =
+    case Std.String.split (line, #",") of
+      | [x, y] => (Std.Int.from_string x |> Std.Result.Unsafe.get_ok,
+                   Std.Int.from_string y |> Std.Result.Unsafe.get_ok)
+      | _ => raise Fail ("Cannot parse point from line " ^ line)
+    end
+
+datatype fold = X of int | Y of int
+
+fun parse_fold line =
+    case Std.String.split (line, #" ") of
+      | ["fold", "along", fold] => case Std.String.split (fold, #"=") of
+                                     | ["x", v] => X (Std.Int.from_string v
+                                                      |> Std.Result.Unsafe.get_ok)
+                                     | ["y", v] => Y (Std.Int.from_string v
+                                                      |> Std.Result.Unsafe.get_ok)
+                                     | _ => raise Fail ("Cannot parse fold from line " ^ line)
+                                   end
+      | _ => raise Fail ("Cannot parse fold from line " ^ line)
+    end
+
+fun parse_lines (): PS.t * fold list =
+    let
+      val (points_lines, fold_lines) = Std.Vector.partition (
+            lines,
+            fn line => not (Std.String.sub (line, 0) = Some #"f")
+          )
+      val points_lines = Std.Vector.filter (points_lines, fn line => line <> "")
+
+      val points = PS.new ()
+    in
+      Std.Vector.app (
+        points_lines,
+        fn line => PS.add (points, parse_point line) |> ignore
+      );
+      (points, (Std.Vector.to_iter fold_lines) </ Std.Iterator.map /> parse_fold
+               |> Std.Iterator.to_list)
+    end
+
+fun points_to_string points =
+    let
+      val (x_dim, y_dim) = PS.fold (
+            points,
+            (0, 0),
+            fn ((x, y), (x_dim, y_dim)) =>
+               (Std.Int.max (x + 1, x_dim), Std.Int.max (y + 1, y_dim))
+          )
+
+      val viz = Std.Array.tabulate (
+            y_dim,
+            fn _ =>
+               Std.Array.new (
+                 x_dim,
+                 "⬛"
+               )
+          )
+
+      val _ = PS.app (
+            points,
+            fn (x, y) =>
+               Std.Array.set (
+                 Std.Array.sub (viz, y) |> Std.Option.Unsafe.get,
+                 x,
+                 "⬜"
+               )
+               |> ignore
+          )
+
+      val viz_string = Std.String.concat_with (
+            (Std.Array.to_iter viz)
+            </ Std.Iterator.map />
+            (fn yviz => (Std.Array.to_iter yviz) |> Std.Iterator.to_list |> Std.String.concat)
+            |> Std.Iterator.to_list,
+            "\n"
+          )
+    in
+      Std.String.concat [
+        (PS.to_iter points) |> Std.Iterator.length |> Std.Int.to_string,
+        " points: ",
+        Std.String.concat_with (
+          PS.fold (
+            points,
+            [],
+            fn ((x, y), acc) =>
+               ("(" ^ Std.Int.to_string x ^ ", " ^ Std.Int.to_string y ^ ")") :: acc
+          ),
+          ", "
+        ),
+        "\n",
+        viz_string
+      ]
+    end
+
+fun fold_to_string fold =
+    case fold of
+      | X v => "X/" ^ Std.Int.to_string v
+      | Y v => "Y/" ^ Std.Int.to_string v
+    end
+
+val (points, folds) = parse_lines ()
+val _ = println (Std.String.concat [
+                    "Parsed points:\n",
+                    points_to_string points,
+                    "\nand folds: ",
+                    Std.String.concat_with (
+                      Std.List.map (folds, fold_to_string),
+                      ", "
+                    )
+                ])
+
+fun process_fold (points, fold) =
+    let
+      val points_iter = (PS.to_iter points) |> Std.Iterator.freeze
+
+      fun fold_point (x, y) =
+          case fold of
+            | X v => if x = v
+                     then // point eliminated by fold
+                       None
+                     else
+                       if x < v
+                       then Some (x, y)
+                       else Some (v - (x - v), y)
+            | Y v => if y = v
+                     then // point eliminated by fold
+                       None
+                     else
+                       if y < v
+                       then Some (x, y)
+                       else Some (x, v - (y - v))
+          end
+    in
+      Std.Iterator.app (
+        points_iter,
+        fn (x, y) =>
+           (PS.delete (points, (x, y)) |> ignore;
+            case fold_point (x, y) of
+              | Some new_point => PS.add (points, new_point) |> ignore
+              | None => ()
+            end)
+      )
+    end
+
+val _ = Std.List.app (
+      folds,
+      fn fold =>
+         (println ("Processing fold " ^ fold_to_string fold);
+          process_fold (points, fold);
+          println (points_to_string points))
+    )
