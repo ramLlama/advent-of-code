@@ -1,0 +1,156 @@
+open BeyondBasis.Pervasive
+
+structure DA = Citroen.Imperative.DynamicArray
+structure VM = Citroen.Imperative.HashMap.Make (type key = string
+                                                val hash = Std.Utilities.hash
+                                                val equals = op=)
+
+val lines = (Std.Vector.sub (Util.get_args 1, 0))
+            |> Std.Option.Unsafe.get
+            |> Util.file_to_lines
+
+val graph: string DA.t VM.t = VM.new ()
+
+fun parse_line line =
+    let
+      val (v0, v1) = case Std.String.split (line, #"-") of
+                       | [v0, v1] => (v0, v1)
+                       | _ => raise Fail ("Could not parse line " ^ line)
+                     end
+    in
+      Std.Debug.println ("Parsed edge " ^ v0 ^ " -- " ^ v1);
+      case VM.get (graph, v0) of
+        | Some (_, adjs) => DA.push (adjs, v1)
+        | None => VM.set (graph, v0, DA.new (1, v1))
+      end;
+      case VM.get (graph, v1) of
+        | Some (_, adjs) => DA.push (adjs, v0)
+        | None => VM.set (graph, v1, DA.new (1, v0))
+      end;
+    end
+
+fun cave_is_big cave =
+    let
+      val first_char = Std.String.sub (cave, 0) |> Std.Option.Unsafe.get
+    in
+      first_char = Std.Char.to_upper first_char
+    end
+
+fun graph_to_string graph =
+    Std.String.concat_with (
+      VM.fold (
+        graph,
+        [],
+        fn (v, adjs, acc) =>
+           (Std.String.concat [
+               v,
+               " ",
+               if cave_is_big v
+               then "(big)"
+               else "(small)",
+               " --> [",
+               Std.String.concat_with (
+                 (DA.to_iter adjs) |> Std.Iterator.to_list,
+                 ", "
+               ),
+               "]"
+           ])
+           :: acc
+      ),
+      "\n"
+    )
+
+val _ = Std.Vector.app (lines, parse_line)
+val _ = println ("Parsed graph:\n" ^ graph_to_string graph)
+
+fun paths_to_string paths =
+    Std.String.concat_with (
+      Std.List.map (paths, fn path => Std.String.concat_with (Std.List.reverse path, " -> ")),
+      "\n"
+    )
+
+fun find_paths_part1 (this_cave, paths) =
+    if this_cave = "end"
+    then // we're done, append "end" and return.
+      Std.List.map (paths, fn path => this_cave :: path)
+    else
+      let
+        // filter out paths if this is a small cave
+        val paths = if cave_is_big this_cave
+                    then paths
+                    else Std.List.filter (paths,
+                                          fn path =>
+                                             not (Std.List.any (path, fn cave => this_cave = cave)))
+
+        // add this cave to the paths
+        val paths = Std.List.map (paths, fn path => this_cave :: path)
+      in
+        if Std.List.length paths = 0
+        then // filtered out all paths, this one is pruned
+          []
+        else
+          Std.List.flatten (
+            DA.fold_left (
+              VM.get (graph, this_cave) |> Std.Option.Unsafe.get |> #2,
+              [],
+              fn (neighbor, acc) =>
+                 find_paths_part1 (neighbor, paths) :: acc
+            )
+          )
+      end
+
+fun check_hit_small_cave_limit (this_cave, path) =
+    not (cave_is_big this_cave)
+    andalso (Std.Iterator.from_list path
+             </ Std.Iterator.filter />
+             (fn cave => this_cave = cave)
+             |> Std.Iterator.length)
+            > 1
+
+fun find_paths_part2 (this_cave, paths, hit_small_cave_limit) =
+    if this_cave = "end"
+    then // we're done, append "end" and return.
+      Std.List.map (paths, fn path => this_cave :: path)
+    else
+      let
+        // filter out paths if this is a small cave
+        val paths = if this_cave <> "start"
+                       andalso (cave_is_big this_cave orelse not hit_small_cave_limit)
+                    then paths
+                    else Std.List.filter (paths,
+                                          fn path =>
+                                             not (Std.List.any (path, fn cave => this_cave = cave)))
+
+        // add this cave to the paths
+        val paths = Std.List.map (paths, fn path => this_cave :: path)
+
+        val (hit_limit_paths, not_hit_limit_paths) =
+            Std.List.partition (
+              paths,
+              fn path =>
+                 hit_small_cave_limit orelse check_hit_small_cave_limit (this_cave, path)
+            )
+      in
+        if Std.List.length paths = 0
+        then // filtered out all paths, this one is pruned
+          []
+        else
+          Std.List.flatten (
+            DA.fold_left (
+              VM.get (graph, this_cave) |> Std.Option.Unsafe.get |> #2,
+              [],
+              fn (neighbor, acc) =>
+                 [find_paths_part2 (neighbor, hit_limit_paths, true),
+                  find_paths_part2 (neighbor, not_hit_limit_paths, false)]
+                 @ acc
+            )
+          )
+      end
+
+val paths = find_paths_part1 ("start", [[]])
+val _ = println ("Found paths:\n" ^ paths_to_string paths)
+val _ = println ("part 1: Total Number: " ^ (Std.List.length paths |> Std.Int.to_string))
+
+val paths = find_paths_part2 ("start", [[]], false)
+val _ = println ("Found paths:\n" ^ paths_to_string paths)
+val _ = println ("part 2: Total Number: " ^ (Std.List.length paths |> Std.Int.to_string))
