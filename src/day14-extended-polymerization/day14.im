@@ -1,0 +1,220 @@
+open BeyondBasis.Pervasive
+
+structure BM = Citroen.Imperative.HashMap.Make (type key = char * char)
+structure CM = Citroen.Imperative.HashMap.Make (type key = char)
+
+val lines = (Std.Vector.sub (Util.get_args 1, 0))
+            |> Std.Option.Unsafe.get
+            |> Util.file_to_lines
+
+fun parse_template line =
+    let
+      val pair_counts: int BM.t = BM.new ()
+      val char_freq: int CM.t = CM.new ()
+
+      fun doit_counts chars =
+          case chars of
+            | first :: second :: rest =>
+                (case BM.get (pair_counts, (first, second)) of
+                  | Some (_, count) => BM.set (pair_counts, (first, second), count + 1)
+                  | None => BM.set (pair_counts, (first, second), 1)
+                 end;
+                 doit_counts (second :: rest))
+            | _ => ()
+          end
+
+      fun doit_freq chars =
+          case chars of
+            | c :: rest =>
+                (case CM.get (char_freq, c) of
+                  | Some (_, count) => CM.set (char_freq, c, count + 1)
+                  | None => CM.set (char_freq, c, 1)
+                 end;
+                 doit_freq rest)
+            | _ => ()
+          end
+    in
+      doit_counts (Std.String.explode line);
+      doit_freq (Std.String.explode line);
+      (pair_counts, char_freq)
+    end
+
+fun parse_transform (transform_map, line) =
+    case Std.String.split (line, #" ") of
+      | [bigram, "->", insertion] =>
+          case Std.String.explode bigram of
+            | [first, second] => BM.set (transform_map,
+                                         (first, second),
+                                         Std.Char.from_string insertion |> Std.Option.Unsafe.get)
+            | _ => raise Fail ("Could not parse transform from line " ^ line)
+          end
+      | _ => raise Fail ("Could not parse transform from line " ^ line)
+    end
+
+fun parse_lines () =
+    let
+      val template_line = Std.Vector.Unsafe.sub (lines, 0)
+      val transform_lines = Std.VectorSlice.slice (lines, 2, Std.Vector.length lines - 2)
+                            |> Std.Option.Unsafe.get
+
+      val transform_map: char BM.t = BM.new ()
+      val _ = Std.VectorSlice.app (transform_lines,
+                                   fn line => parse_transform (transform_map, line))
+    in
+      (parse_template template_line, transform_map)
+    end
+
+fun polymer_to_string (pair_counts, char_freq) =
+    Std.String.concat [
+      "{",
+      Std.String.concat_with (
+        CM.fold (
+          char_freq,
+          [],
+          fn (c, count, acc) =>
+             (Std.Char.to_string c^ ": " ^ Std.Int.to_string count)
+             :: acc
+        ),
+        ", "
+      ),
+      "}",
+
+      "/",
+
+      "{",
+      Std.String.concat_with (
+        BM.fold (
+          pair_counts,
+          [],
+          fn ((first, second), count, acc) =>
+             (Std.Char.to_string first ^ Std.Char.to_string second ^ ": "
+              ^ Std.Int.to_string count)
+             :: acc
+        ),
+        ", "
+      ),
+      "}"
+    ]
+
+fun transforms_to_string transform_map =
+    Std.String.concat_with (
+      (BM.to_iter transform_map)
+      </ Std.Iterator.map />
+      (fn ((first, second), insert) =>
+          Std.String.concat [Std.Char.to_string first,
+                             Std.Char.to_string second,
+                             " -> ",
+                             Std.Char.to_string insert])
+      |> Std.Iterator.to_list,
+      "\n"
+    )
+
+fun do_transform ((pair_counts, char_freq), transform_map) =
+    let
+      fun increment_count (bigram, incr) =
+          case BM.get (pair_counts, bigram) of
+            | Some (_, count) => BM.set (pair_counts, bigram, count + incr)
+            | None => BM.set (pair_counts, bigram, incr)
+          end
+
+      fun increment_freq (c, incr) =
+          case CM.get (char_freq, c) of
+            | Some (_, count) => CM.set (char_freq, c, count + incr)
+            | None => CM.set (char_freq, c, incr)
+          end
+
+      fun process_pair_count ((first, second), count) =
+          case BM.get (transform_map, (first, second)) of
+            | Some (_, insertion) => // insert the new pairs into the counts
+                (increment_count ((first, insertion), count);
+                 increment_count ((insertion, second), count);
+                 increment_freq (insertion, count))
+            | None => // just put this pair back in, freq doesn't change.
+                increment_count ((first, second), count)
+          end
+
+      val before_string = polymer_to_string (pair_counts, char_freq)
+
+      val cur_pairs = BM.to_iter pair_counts |> Std.Iterator.freeze
+      val _ = (BM.clear pair_counts;
+               Std.Iterator.app (cur_pairs, process_pair_count))
+
+      val after_string = polymer_to_string (pair_counts, char_freq)
+    in
+      println (before_string ^ " -> " ^ after_string)
+    end
+
+fun freq_table_to_string freqs =
+    Std.String.concat [
+      "{",
+      Std.String.concat_with (
+        CM.fold (
+          freqs,
+          [],
+          fn (c, freq, acc) =>
+             (Std.Char.to_string c ^ ": " ^ Std.Int.to_string freq) :: acc
+        ),
+        ", "
+      ),
+      "}"
+    ]
+
+val ((pair_counts, char_freq), transform_map) = parse_lines ()
+
+val _ = println ("Found pair_counts "
+                 ^ polymer_to_string (pair_counts, char_freq)
+                 ^ "\nand transforms:\n"
+                 ^ transforms_to_string transform_map)
+
+val polymer1 = (BM.copy pair_counts, CM.copy char_freq)
+val polymer2 = (BM.copy pair_counts, CM.copy char_freq)
+
+val _ = Std.Iterator.app (
+      Std.Int.range (0, 10, 1) |> Std.Result.Unsafe.get_ok,
+      fn i =>
+         (print ("Step " ^ Std.Int.to_string (i + 1) ^ ": ");
+          do_transform (polymer1, transform_map))
+    )
+
+val freqs = #2 polymer1
+val _ = println (freq_table_to_string freqs)
+
+val (min, max) = CM.fold (
+      freqs,
+      (Std.Int.max_value |> Std.Option.Unsafe.get, Std.Int.min_value |> Std.Option.Unsafe.get),
+      fn (_, freq, (min, max)) =>
+         (Std.Int.min (min, freq), Std.Int.max (max, freq))
+    )
+val _ = println (Std.String.concat [
+                    "part 1: ",
+                    Std.Int.to_string max,
+                    " - ",
+                    Std.Int.to_string min,
+                    " = ",
+                    Std.Int.to_string (max - min)
+                ])
+
+val _ = Std.Iterator.app (
+      Std.Int.range (0, 40, 1) |> Std.Result.Unsafe.get_ok,
+      fn i =>
+         (print ("Step " ^ Std.Int.to_string (i + 1) ^ ": ");
+          do_transform (polymer2, transform_map))
+    )
+
+val freqs = #2 polymer2
+val _ = println (freq_table_to_string freqs)
+
+val (min, max) = CM.fold (
+      freqs,
+      (Std.Int.max_value |> Std.Option.Unsafe.get, Std.Int.min_value |> Std.Option.Unsafe.get),
+      fn (_, freq, (min, max)) =>
+         (Std.Int.min (min, freq), Std.Int.max (max, freq))
+    )
+val _ = println (Std.String.concat [
+                    "part 2: ",
+                    Std.Int.to_string max,
+                    " - ",
+                    Std.Int.to_string min,
+                    " = ",
+                    Std.Int.to_string (max - min)
+                ])
