@@ -1,0 +1,52 @@
+open BeyondBasis.Pervasive
+
+structure Util = struct
+  val get_args: int -> string Std.Vector.t =
+   fn n =>
+      let
+        val getopt = Getopt.new ()
+        val free_args = Getopt.parse (getopt, Std.CommandLine.arguments ())
+                                     |> Std.Result.Unsafe.get_ok
+                                     |> Getopt.ParseResult.free_values
+      in
+        if Std.List.length free_args < n
+        then raise Fail ("Not enough args given, need " ^ (Std.Int.to_string n))
+        else Std.Vector.tabulate (
+            n,
+            fn i =>
+               Std.List.nth (free_args, i) |> Std.Option.Unsafe.get
+          )
+      end
+
+  // Removes the empty last line and chomps off #"\n" terminators
+  val file_to_lines: string -> string Std.Vector.t =
+   fn path =>
+      let
+        val file = case Std.Filesystem.File.open_path (
+                       path,
+                       Std.Filesystem.OpenOptions.new () </ Std.Filesystem.OpenOptions.read /> true
+                     ) of
+                     | Ok f => f
+                     | Error _ => raise Fail ("Failed to open file at " ^ path)
+                   end
+
+        val contents = case Std.Filesystem.File.read_to_end_to_string file of
+                         | Ok c => c
+                         | Error _ => raise Fail ("Failed to read contents of " ^ path)
+                       end
+        val lines = Std.String.split (contents, #"\n")
+        val cursor = ref lines
+      in
+        Std.Vector.tabulate (
+          Std.List.length lines - 1,
+          fn _ =>
+             case !cursor of
+               | line :: rest => (
+                     cursor := !cursor |> Std.List.tail |> Std.Option.Unsafe.get;
+                     line
+                   )
+               | _ => raise Fail ("Shouldn't get here!")
+             end
+        )
+      end
+end
