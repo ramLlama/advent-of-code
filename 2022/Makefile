@@ -6,3 +6,7 @@ all: $(DAYS_TARGETS)
 
 build/%: src/%/main.im
 	imlic $(subst main.im,$*.mlb,$<)
+
+.PHONY: run-%
+run-%: build/%
+	build/$* src/$*/input

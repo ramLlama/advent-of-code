@@ -3,7 +3,6 @@ open BeyondBasis.Pervasive
 structure DA = Citroen.Imperative.DynamicArray
 
 val lines = (Std.Vector.sub (Util.get_args 1, 0))
-            |> Std.Option.Unsafe.get
             |> Util.file_to_lines
 
 val packs = Std.Vector.fold_left (
@@ -11,11 +10,11 @@ val packs = Std.Vector.fold_left (
       [[0]],
       fn (line, packs) =>
          case packs of
-             | pack :: rest =>
-                 if line = ""
-                 then [0] :: pack :: rest
-                 else ((Std.Int.from_string line |> Std.Result.Unsafe.get_ok) :: pack) :: rest
-             | _ => raise Fail ("Invalid line " ^ line)
+           | pack :: rest =>
+               if line = ""
+               then [0] :: pack :: rest
+               else ((Std.Int.from_string line |> Std.Result.Unsafe.get_ok) :: pack) :: rest
+           | _ => raise Fail ("Invalid line " ^ line)
          end
     )
 
@@ -32,4 +31,4 @@ val second = DA.pop calories |> Std.Option.Unsafe.get
 val third = DA.pop calories |> Std.Option.Unsafe.get
 
 val _ = println ("part1: Max is " ^ (Std.Int.to_string first))
-val _ = println ("part1: top3 is " ^ (Std.Int.to_string (first + second + third)))
+val _ = println ("part2: top3 is " ^ (Std.Int.to_string (first + second + third)))
