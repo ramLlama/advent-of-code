@@ -6,8 +6,8 @@ structure Util = struct
       let
         val getopt = Getopt.new ()
         val free_args = Getopt.parse (getopt, Std.CommandLine.arguments ())
-                                     |> Std.Result.Unsafe.get_ok
-                                     |> Getopt.ParseResult.free_values
+                        |> Std.Result.Unsafe.get_ok
+                        |> Getopt.ParseResult.free_values
       in
         if Std.List.length free_args < n
         then raise Fail ("Not enough args given, need " ^ (Std.Int.to_string n))
@@ -42,11 +42,16 @@ structure Util = struct
           fn _ =>
              case !cursor of
                | line :: rest => (
-                     cursor := !cursor |> Std.List.tail |> Std.Option.Unsafe.get;
-                     line
-                   )
+                 cursor := !cursor |> Std.List.tail |> Std.Option.Unsafe.get;
+                 line
+               )
                | _ => raise Fail ("Shouldn't get here!")
              end
         )
       end
+
+  // Convert first arg filename into lines vector
+  val get_lines: unit -> string Std.Vector.t =
+   fn () =>
+      (Std.Vector.sub (get_args 1, 0)) |> file_to_lines
 end
