@@ -1,0 +1,76 @@
+open BeyondBasis.Pervasive
+open Citroen.Pervasive
+
+structure CharSet = HashSet.Make(type value = char)
+
+val lines = Util.get_lines ()
+
+fun compartment_line_to_set compartment =
+    (Std.String.explode compartment) |> Std.Iterator.from_list |> CharSet.from_iter
+
+fun line_to_dupe line =
+    let
+      val half_len = (Std.String.length line) div 2
+      val c1 = Std.String.substring (line, 0, half_len)
+               |> unwrap_option
+               |> compartment_line_to_set
+      val c2 = Std.String.substring (line, half_len, half_len)
+               |> unwrap_option
+               |> compartment_line_to_set
+    in
+      CharSet.intersection (c1, c2) |> Std.Iterator.next |> unwrap_option
+    end
+
+fun item_to_priority item =
+    let
+      val a_int = Std.Char.to_int #"a"
+      val z_int = Std.Char.to_int #"z"
+      val A_int = Std.Char.to_int #"A"
+
+      val item_int = Std.Char.to_int item
+
+      val is_lower = a_int <= item_int andalso item_int <= z_int
+    in
+      if is_lower
+      then item_int - a_int + 1
+      else item_int - A_int + 27
+    end
+
+fun lines_to_group_badge_priorities lines =
+    let
+      fun doit (line, ((e1, e2, e3), badge_prios)) =
+          case (e1, e2, e3) of
+            | (None, _, _) => ((Some line, None, None), badge_prios)
+            | (Some _, None, _) => ((e1, Some line, None), badge_prios)
+            | (Some line1, Some line2, None) =>
+                let
+                  val line3 = line
+
+                  val c1 = compartment_line_to_set line1
+                  val c2 = compartment_line_to_set line2
+                  val c3 = compartment_line_to_set line3
+
+                  val badge =
+                      CharSet.intersection (CharSet.intersection (c1, c2) |> CharSet.from_iter,
+                                            c3)
+                      |> Std.Iterator.next
+                      |> unwrap_option
+                in
+                  ((None, None, None), (item_to_priority badge) :: badge_prios)
+                end
+            | _ => raise Fail "Shouldn't get here"
+          end
+
+      val (_, badge_prios) = Std.Vector.fold_left (lines, ((None, None, None), []), doit)
+    in
+      badge_prios
+    end
+
+val sum_prios = (Std.Vector.to_iter lines)
+                </ Std.Iterator.map /> line_to_dupe
+                </ Std.Iterator.map /> item_to_priority
+                |> (fn priorities => Std.Iterator.fold (priorities, 0, op+))
+val _ = println ("part1: sum of prios is " ^ Std.Int.to_string sum_prios)
+
+val sum_badge_prios = Std.List.fold_left (lines_to_group_badge_priorities lines, 0, op+)
+val _ = println ("part2: sum of badge prios is " ^ Std.Int.to_string sum_badge_prios)
