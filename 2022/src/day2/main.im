@@ -1,0 +1,113 @@
+open BeyondBasis.Pervasive
+open Citroen.Pervasive
+
+val lines = Util.get_lines ()
+
+datatype shape = Rock | Paper | Scissors
+datatype outcome = Win | Lose | Draw
+
+fun abc_to_shape c =
+    case c of
+      | #"A" => Rock
+      | #"B" => Paper
+      | #"C" => Scissors
+      | _ => raise Fail ("Invalid ABC shape " ^ Std.Char.to_string c)
+    end
+
+fun xyz_to_shape c =
+    case c of
+      | #"X" => Rock
+      | #"Y" => Paper
+      | #"Z" => Scissors
+      | _ => raise Fail ("Invalid XYZ shape " ^ Std.Char.to_string c)
+    end
+
+fun xyz_to_outcome c =
+    case c of
+      | #"X" => Lose
+      | #"Y" => Draw
+      | #"Z" => Win
+      | _ => raise Fail ("Invalid XYZ outcome " ^ Std.Char.to_string c)
+    end
+
+fun shape_to_score s =
+    case s of
+      | Rock => 1
+      | Paper => 2
+      | Scissors => 3
+    end
+
+fun game_to_score (opp_shape, my_shape) =
+    let
+      val win = 6
+      val loss = 0
+      val draw = 3
+
+      val outcome_score =
+          case (opp_shape, my_shape) of
+            | (Rock, Rock) => draw
+            | (Rock, Paper) => win
+            | (Rock, Scissors) => loss
+
+            | (Paper, Rock) => loss
+            | (Paper, Paper) => draw
+            | (Paper, Scissors) => win
+
+            | (Scissors, Rock) => win
+            | (Scissors, Paper) => loss
+            | (Scissors, Scissors) => draw
+          end
+    in
+      outcome_score + (shape_to_score my_shape)
+    end
+
+fun line_to_part1_score line =
+    let
+      val game = case Std.String.explode line of
+                   | [opp_shape_c, #" ", my_shape_c] =>
+                       (abc_to_shape opp_shape_c, xyz_to_shape my_shape_c)
+                   | _ => raise Fail ("Invalid line \"" ^ line ^ "\"")
+                 end
+    in
+      game_to_score game
+    end
+
+fun game_to_my_shape (opp_shape, outcome) =
+    case (opp_shape, outcome) of
+      | (Rock, Win) => Paper
+      | (Rock, Draw) => Rock
+      | (Rock, Lose) => Scissors
+
+      | (Paper, Win) => Scissors
+      | (Paper, Draw) => Paper
+      | (Paper, Lose) => Rock
+
+      | (Scissors, Win) => Rock
+      | (Scissors, Draw) => Scissors
+      | (Scissors, Lose) => Paper
+    end
+
+
+fun line_to_part2_score line =
+    let
+      val (opp_shape, outcome) = case Std.String.explode line of
+                                   | [opp_shape_c, #" ", outcome_c] =>
+                                       (abc_to_shape opp_shape_c, xyz_to_outcome outcome_c)
+                                   | _ => raise Fail ("Invalid line \"" ^ line ^ "\"")
+                                 end
+      val game = (opp_shape, game_to_my_shape (opp_shape, outcome))
+    in
+      game_to_score game
+    end
+
+val part1_score =
+    (Std.Vector.to_iter lines) </ Std.Iterator.map /> line_to_part1_score
+    |> (fn iter => Std.Iterator.fold (iter, 0, op+))
+
+val _ = println ("part1: total score is " ^ Std.Int.to_string part1_score)
+
+val part2_score =
+    (Std.Vector.to_iter lines) </ Std.Iterator.map /> line_to_part2_score
+    |> (fn iter => Std.Iterator.fold (iter, 0, op+))
+
+val _ = println ("part2: total score is " ^ Std.Int.to_string part2_score)
